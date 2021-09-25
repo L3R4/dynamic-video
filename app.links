@@ -1,0 +1,46 @@
+module WebCamJS {
+  alien javascript "js/jswebcam.js" {
+    attachWebCam : () ~%~> ();
+  }
+}
+
+fun displayWebCam() client {
+  var videoXML = <video id="localVideo" autoplay="true">Not supported</video>;
+  appendChildren(videoXML, getNodeById("name_form"));
+  WebCamJS.attachWebCam()
+}
+
+fun mainPage(_) {
+  page
+    <html>
+      <head>
+        <style>
+          #localVideo {{
+            border: 10px solid #FF1493;
+            position: absolute;
+          }}
+        </style>
+      </head>
+      <body>
+        <div id="container">
+          <div id="name_form">
+            <h1>Display your webcam with this form!</h1>
+            <form l:onsubmit="{displayWebCam()}">
+              <label>Hit submit!</label>
+              <input type="submit"/>
+            </form>
+          </div>
+          <div id="webcam">
+          </div>
+        </div>
+      </body>
+    </html>
+}
+
+fun main() {
+  addRoute("/", mainPage);
+  addStaticRoute("/js", "js", [("js", "text/javascript")]);
+  servePages()
+}
+
+main()
