@@ -10,7 +10,7 @@ WebRTC exists to allow peers to connect to each other directly and send data bet
 
 To begin the process, each peer will connect to a "signalling server" (in this example a WebSocketServer on https). This server will simply broadcast any messages sent to it to all clients connected, including the sender. When peer 1 connects, peer 1 sends a message to the server which reaches no one else since it's the only one connected. When peer 2 connects, peer 2 sends a message which is received by peer 1 who can then create a RTCPeerConnection object and begin collecting ICE candidates. Upon receiving this message, peer 1 also sends a message back to the other peer so that they can begin the same process too.
 
-![Signalling Server](Images\image-20210829224536724.png)
+![Signalling Server](Images/image-20210829224536724.png)
 
 #### Identifying ICE Candidates
 
