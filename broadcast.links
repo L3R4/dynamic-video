@@ -1,0 +1,90 @@
+module StringJS {
+    alien javascript "js/jsfuncs.js" {
+        objToStr : (String) ~%~> (String);
+    }
+}
+
+### CLIENT
+
+## Loop thread run on the client, listens for NewClient messages from the server
+## and prints a message to the console whenever one is received
+fun clientLoop() {
+    receive {
+        case NewClient(n) ->
+            print("New client registered.");
+            clientLoop()
+        case Message(msg) ->
+            var str = StringJS.objToStr(msg);
+            print(str);
+            clientLoop()
+    }
+}
+
+## Run on the client whenever the page has loaded.
+## Registers itself with the server, then proceeds to loop, awaiting messages
+## from the server
+fun clientRegister(serverPid) {
+    serverPid ! Broadcast(self(), true, "");
+    clientLoop()
+}
+
+## Run on the server to generate a page for the client. Spawns a process on the
+## client and generates the HTML.
+fun mainPage(serverPid) {
+    var clientPid = spawnClient { clientRegister(serverPid) };
+    page
+        <html>
+          <div id="txt">
+            <h1>Test</h1>
+            <form l:onsubmit="{serverPid ! Broadcast(self(), false, userName)}">
+              <label>Enter your name!</label>
+              <input type="text" l:name="userName"/>
+              <input type="submit"/>
+            </form>
+          </div>
+        </html>
+}
+
+
+### SERVER
+## Sends a message to a list of clients
+fun broadcast(clients, msg) server {
+    switch (clients) {
+        case [] -> ()
+        case c::clients ->
+            c ! msg;
+            broadcast(clients, msg)
+    }
+}
+
+# Loops, keeping track of the client PIDs
+fun serverLoop(clients) server {
+    receive {
+        case Broadcast(pid, bool, msg) ->
+            switch(bool) {
+                case true ->
+                    var newClients = pid :: clients;
+                    # Broadcast a "New Client" message
+                    broadcast(newClients, NewClient);
+                    serverLoop(newClients)
+                case false ->
+                    broadcast(clients, Message(msg));
+                    serverLoop(clients)
+            }
+    }
+}
+
+
+# Main method, run once when the server is started
+fun main() {
+    # Spawns a process on the server which keeps track of all clients
+    var serverPid = spawn { serverLoop([]) };
+    # Registers the "mainPage" route
+    addRoute("/", fun(_) { mainPage(serverPid) });
+    addStaticRoute("/js", "js", [("js", "text/javascript")]);
+    # Starts the server and distribution
+    serveWebsockets();
+    servePages()
+}
+
+main()

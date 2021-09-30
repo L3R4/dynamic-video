@@ -1,13 +1,13 @@
 module WebCamJS {
   alien javascript "js/jswebcam.js" {
-    attachWebCam : () ~%~> ();
+    attachWebCam : (String) ~%~> ();
   }
 }
 
 fun displayWebCam() client {
   var videoXML = <video id="localVideo" autoplay="true">Not supported</video>;
   appendChildren(videoXML, getNodeById("name_form"));
-  WebCamJS.attachWebCam()
+  WebCamJS.attachWebCam("localVideo")
 }
 
 fun mainPage(_) {
@@ -26,9 +26,10 @@ fun mainPage(_) {
           <div id="name_form">
             <h1>Display your webcam with this form!</h1>
             <form l:onsubmit="{displayWebCam()}">
-              <label>Hit submit!</label>
               <input type="submit"/>
             </form>
+          </div>
+          <div id="txt">
           </div>
           <div id="webcam">
           </div>
