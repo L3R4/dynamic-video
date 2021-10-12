@@ -1,30 +1,169 @@
-module StringJS {
+module FuncsJS {
     alien javascript "js/jsfuncs.js" {
+        ### MATHS
+        floor : (Float) ~%~> (Int);
+        random : () ~%~> (Float);
+
+        ### STRINGS
         objToStr : (String) ~%~> (String);
+        sub : (String) ~%~> (String);
+
+        ### OTHER
+
+        ### WEBRTC
+        webCamLoaded : () ~%~> (String);
+        attachWebCam : (String) ~%~> ();
+        setLocalUuid : () ~%~> ();
+        getLocalUuid : () ~%~> (String);
+        setLocalDisplayName : () ~%~> ();
+        getLocalDisplayName : () ~%~> (String);
+        setUpPeer : (String, String) ~%~> ();
+        makeOffer : (String) ~%~> ();
+        makeAnswer : (String) ~%~> ();
+        offerCompleted : (String) ~%~> (String);
+        receivedDescription : (String, String) ~%~> ();
+        remoteDescriptionSet : (String) ~%~> (String);
+        collectCandidates : () ~%~> (String);
+        addCandidates : (String, String) ~%~> ();
     }
 }
 
-### CLIENT
+fun checkForIceCandidates(serverPid) {
+  var candidates = FuncsJS.collectCandidates();
+  if (candidates <> "No candidates") {
+    var localUuid = FuncsJS.getLocalUuid();
+    var message = (displayName="_", uuid=localUuid, dest="all", type="ice", sdp="_", sdptype="_", iceCandidates=candidates);
+    serverPid ! Broadcast(serverPid, message);
+    checkForIceCandidates(serverPid)
+  } else {
+    checkForIceCandidates(serverPid)
+  }
+}
 
-## Loop thread run on the client, listens for NewClient messages from the server
-## and prints a message to the console whenever one is received
+fun waitForOffer(serverPid, peerUuid, sdpType) {
+  var result = FuncsJS.offerCompleted(peerUuid);
+  if (result <> "Not finished") {
+    var name = FuncsJS.getLocalDisplayName();
+    var localUuid = FuncsJS.getLocalUuid();
+    var message = (displayName=name, uuid=localUuid, dest=peerUuid, type="sdp", sdp=result, sdptype=sdpType, iceCandidates="_");
+    serverPid ! Broadcast(serverPid, message);
+    ()
+  } else {
+    waitForOffer(serverPid, peerUuid, sdpType)
+  }
+}
+
+fun waitForRemoteDescSet(peerUuid) {
+  var result = FuncsJS.remoteDescriptionSet(peerUuid);
+  if (result == "Finished")
+    ()
+  else
+    waitForRemoteDescSet(peerUuid)
+}
+
+fun setUpNewPeer(serverPid, peerUuid, dispName, initCall) {
+  FuncsJS.setUpPeer(peerUuid, dispName);
+  if (initCall == true) {
+    FuncsJS.makeOffer(peerUuid);
+    waitForOffer(serverPid, peerUuid, "offer");
+    ()
+  } else {
+    ()
+  }
+}
+
+fun receivedOffer(serverPid, peerUuid, desc) {
+  FuncsJS.receivedDescription(peerUuid, desc);
+  waitForRemoteDescSet(peerUuid);
+  var localUuid = FuncsJS.getLocalUuid();
+  FuncsJS.makeAnswer(peerUuid);
+  waitForOffer(serverPid, peerUuid, "answer");
+  ()
+}
+
+fun dealWithMessage(serverPid, msg) {
+  var localUuid = FuncsJS.getLocalUuid();
+  var peerUuid = FuncsJS.objToStr(msg.uuid);
+  var msgDest = FuncsJS.objToStr(msg.dest);
+  var msgType = FuncsJS.objToStr(msg.type);
+  var dispName = FuncsJS.objToStr(msg.displayName);
+  print(msgType);
+  print(localUuid);
+  if (peerUuid == localUuid || (msgDest <> localUuid && msgDest <> "all")) {
+    ()
+  } else {
+    switch (msgType) {
+      case "first" ->
+        setUpNewPeer(serverPid, peerUuid, dispName, false);
+        var iceId = spawnClient { checkForIceCandidates(serverPid) };
+        var localName = FuncsJS.getLocalDisplayName();
+        var message = (displayName=localName, uuid=localUuid, dest=msgDest, type="response", sdp="_", sdptype="_", iceCandidates="_");
+        serverPid ! Broadcast(serverPid, message);
+        ()
+      case "response" ->
+        print("yes");
+        setUpNewPeer(serverPid, peerUuid, dispName, true);
+        var iceId2 = spawnClient { checkForIceCandidates(serverPid) };
+        ()
+      case "sdp" ->
+        print("Omg");
+        var msgSdp = FuncsJS.objToStr(msg.sdp);
+        var msgSdptype = FuncsJS.objToStr(msg.sdptype);
+        if (msgSdptype == "offer") {
+          receivedOffer(serverPid, peerUuid, msgSdp);
+          ()
+        } else {
+          FuncsJS.receivedDescription(peerUuid, msgSdp);
+          waitForRemoteDescSet(peerUuid);
+          ()
+        }
+      case "ice" ->
+        print(peerUuid);
+        var msgIce = FuncsJS.objToStr(msg.iceCandidates);
+        FuncsJS.addCandidates(msgIce, peerUuid);
+        ()
+    }
+  }
+}
+
+fun waitForWebCam() {
+  var result = FuncsJS.webCamLoaded();
+  if (result == "true")
+    ()
+  else
+    waitForWebCam()
+}
+
+fun displayWebCam() {
+  var videoXML = <div id="localVideo" class="videoContainer">
+                   <video id="localvid" autoplay="true">Not supported</video>
+                 </div>;
+  appendChildren(videoXML, getNodeById("videos"));
+  FuncsJS.attachWebCam("localvid")
+}
+
+### CLIENT
+## Loop thread run on the client, listens for messages from the server
 fun clientLoop() {
     receive {
-        case NewClient(n) ->
-            print("New client registered.");
-            clientLoop()
-        case Message(msg) ->
-            var str = StringJS.objToStr(msg);
-            print(str);
+        case Message(serverPid, msg) ->
+            print("NEW MESSAGE");
+            dealWithMessage(serverPid, msg);
             clientLoop()
     }
 }
 
 ## Run on the client whenever the page has loaded.
-## Registers itself with the server, then proceeds to loop, awaiting messages
-## from the server
 fun clientRegister(serverPid) {
-    serverPid ! Broadcast(self(), true, "");
+    FuncsJS.setLocalDisplayName();
+    FuncsJS.setLocalUuid();
+    var name = FuncsJS.getLocalDisplayName();
+    displayWebCam();
+    waitForWebCam();
+    var localUuid = FuncsJS.getLocalUuid();
+    print(localUuid);
+    var message = (displayName=name, uuid=localUuid, dest="all", type="first", sdp="_", sdptype="_", iceCandidates="_");
+    serverPid ! Register(self(), serverPid, message);
     clientLoop()
 }
 
@@ -34,14 +173,21 @@ fun mainPage(serverPid) {
     var clientPid = spawnClient { clientRegister(serverPid) };
     page
         <html>
+        <head>
+          <style>
+            .vidContainer {{
+              border: 10px solid #FF1493;
+              position: relative;
+            }}
+          </style>
+        </head>
+        <body>
           <div id="txt">
             <h1>Test</h1>
-            <form l:onsubmit="{serverPid ! Broadcast(self(), false, userName)}">
-              <label>Enter your name!</label>
-              <input type="text" l:name="userName"/>
-              <input type="submit"/>
-            </form>
           </div>
+          <div id="videos">
+          </div>
+        </body>
         </html>
 }
 
@@ -60,17 +206,15 @@ fun broadcast(clients, msg) server {
 # Loops, keeping track of the client PIDs
 fun serverLoop(clients) server {
     receive {
-        case Broadcast(pid, bool, msg) ->
-            switch(bool) {
-                case true ->
-                    var newClients = pid :: clients;
-                    # Broadcast a "New Client" message
-                    broadcast(newClients, NewClient);
-                    serverLoop(newClients)
-                case false ->
-                    broadcast(clients, Message(msg));
-                    serverLoop(clients)
-            }
+        case Register(pid, serverPid, msg) ->
+            var newClients = pid :: clients;
+            # Broadcast a "New Client" message
+            broadcast(newClients, Message(self(), msg));
+            serverLoop(newClients)
+
+        case Broadcast(serverPid, msg) ->
+            broadcast(clients, Message(self(), msg));
+            serverLoop(clients)
     }
 }
 

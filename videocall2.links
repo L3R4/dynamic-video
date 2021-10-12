@@ -1,0 +1,151 @@
+module FuncsJS {
+    alien javascript "js/jsfuncs2.js" {
+        ### MATHS
+        floor : (Float) ~%~> (Int);
+        random : () ~%~> (Float);
+
+        ### STRINGS
+        objToStr : (String) ~%~> (String);
+        sub : (String) ~%~> (String);
+
+        ### OTHER
+
+        ### WEBRTC
+        webCamLoaded : () ~%~> (String);
+        attachWebCam : (String) ~%~> ();
+        getInitialMessage : () ~%~> ();
+        gotMessageFromServer : (String) ~%~> ();
+        getResponseIfFinished : () ~%~> (String);
+    }
+}
+
+fun waitForWebCam() {
+  var result = FuncsJS.webCamLoaded();
+  if (result == "true")
+    ()
+  else
+    waitForWebCam()
+}
+
+fun displayWebCam() {
+  var videoXML = <video id="localVideo" autoplay="true">Not supported</video>;
+  appendChildren(videoXML, getNodeById("videos"));
+  FuncsJS.attachWebCam("localVideo")
+}
+
+#fun checkForIceCandidates(serverPid) {
+  #var candidates = FuncsJS.collectCandidates();
+  #if (candidates <> "No candidates") {
+    #var message = (displayName="_", uuid="_", dest="_", type="ice", iceCandidates=candidates);
+    #serverPid ! Broadcast(serverPid, message);
+    #checkForIceCandidates(serverPid)
+  #} else {
+    #checkForIceCandidates(serverPid)
+  #}
+#}
+
+fun waitForResponse() {
+  var res = FuncsJS.getResponseIfFinished();
+  switch (res) {
+    case "Not for us" ->
+      "Not for us"
+    case "Still waiting" ->
+      waitForResponse()
+    case other ->
+      res
+  }
+}
+
+fun receivedMessage(serverPid, msg) {
+  var message = FuncsJS.objToStr(msg);
+  FuncsJS.gotMessageFromServer(message);
+  var res = waitForResponse();
+  serverPid ! res;
+  ()
+}
+
+### CLIENT
+## Loop thread run on the client, listens for messages from the server
+fun clientLoop() {
+    receive {
+        case Message(serverPid, msg) ->
+            receivedMessage(serverPid, msg);
+            clientLoop()
+    }
+}
+
+## Run on the client whenever the page has loaded.
+fun clientRegister(serverPid) {
+    displayWebCam();
+    waitForWebCam();
+    FuncsJS.getInitialMessage();
+    var res = waitForResponse();
+    serverPid ! Register(serverPid, self(), res);
+    clientLoop()
+}
+
+## Run on the server to generate a page for the client. Spawns a process on the
+## client and generates the HTML.
+fun mainPage(serverPid) {
+    var clientPid = spawnClient { clientRegister(serverPid) };
+    page
+        <html>
+        <head>
+          <style>
+            #localVideo {{
+              border: 10px solid #FF1493;
+              position: absolute;
+            }}
+          </style>
+        </head>
+        <body>
+          <div id="txt">
+            <h1>Test</h1>
+          </div>
+          <div id="videos">
+          </div>
+        </body>
+        </html>
+}
+
+
+### SERVER
+## Sends a message to a list of clients
+fun broadcast(clients, msg) server {
+    switch (clients) {
+        case [] -> ()
+        case c::clients ->
+            c ! msg;
+            broadcast(clients, msg)
+    }
+}
+
+# Loops, keeping track of the client PIDs
+fun serverLoop(clients) server {
+    receive {
+        case Register(serverPid, pid, msg) ->
+            var newClients = pid :: clients;
+            # Broadcast a "New Client" message
+            broadcast(newClients, Message(serverPid, msg));
+            serverLoop(newClients)
+
+        case Broadcast(serverPid, msg) ->
+            broadcast(clients, Message(serverPid, msg));
+            serverLoop(clients)
+    }
+}
+
+
+# Main method, run once when the server is started
+fun main() {
+    # Spawns a process on the server which keeps track of all clients
+    var serverPid = spawn { serverLoop([]) };
+    # Registers the "mainPage" route
+    addRoute("/", fun(_) { mainPage(serverPid) });
+    addStaticRoute("/js", "js", [("js", "text/javascript")]);
+    # Starts the server and distribution
+    serveWebsockets();
+    servePages()
+}
+
+main()
