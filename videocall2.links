@@ -16,6 +16,7 @@ module FuncsJS {
         getInitialMessage : () ~%~> ();
         gotMessageFromServer : (String) ~%~> ();
         getResponseIfFinished : () ~%~> (String);
+        collectCandidates : () ~%~> (String);
     }
 }
 
@@ -33,16 +34,15 @@ fun displayWebCam() {
   FuncsJS.attachWebCam("localVideo")
 }
 
-#fun checkForIceCandidates(serverPid) {
-  #var candidates = FuncsJS.collectCandidates();
-  #if (candidates <> "No candidates") {
-    #var message = (displayName="_", uuid="_", dest="_", type="ice", iceCandidates=candidates);
-    #serverPid ! Broadcast(serverPid, message);
-    #checkForIceCandidates(serverPid)
-  #} else {
-    #checkForIceCandidates(serverPid)
-  #}
-#}
+fun checkForIceCandidates(serverPid) {
+  var candidates = FuncsJS.collectCandidates();
+  if (candidates <> "No candidates") {
+    serverPid ! Broadcast(serverPid, candidates);
+    checkForIceCandidates(serverPid)
+  } else {
+    checkForIceCandidates(serverPid)
+  }
+}
 
 fun waitForResponse() {
   var res = FuncsJS.getResponseIfFinished();
@@ -60,8 +60,12 @@ fun receivedMessage(serverPid, msg) {
   var message = FuncsJS.objToStr(msg);
   FuncsJS.gotMessageFromServer(message);
   var res = waitForResponse();
-  serverPid ! res;
-  ()
+  if (res <> "Not for us") {
+    serverPid ! Broadcast(serverPid, res);
+    ()
+  } else {
+    ()
+  }
 }
 
 ### CLIENT
@@ -80,6 +84,7 @@ fun clientRegister(serverPid) {
     waitForWebCam();
     FuncsJS.getInitialMessage();
     var res = waitForResponse();
+    var iceId = spawnClient { checkForIceCandidates(serverPid) };
     serverPid ! Register(serverPid, self(), res);
     clientLoop()
 }
@@ -92,9 +97,9 @@ fun mainPage(serverPid) {
         <html>
         <head>
           <style>
-            #localVideo {{
+            .vidContainer {{
               border: 10px solid #FF1493;
-              position: absolute;
+              position: relative;
             }}
           </style>
         </head>
@@ -126,11 +131,11 @@ fun serverLoop(clients) server {
         case Register(serverPid, pid, msg) ->
             var newClients = pid :: clients;
             # Broadcast a "New Client" message
-            broadcast(newClients, Message(serverPid, msg));
+            broadcast(newClients, Message(self(), msg));
             serverLoop(newClients)
 
         case Broadcast(serverPid, msg) ->
-            broadcast(clients, Message(serverPid, msg));
+            broadcast(clients, Message(self(), msg));
             serverLoop(clients)
     }
 }

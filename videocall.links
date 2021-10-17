@@ -163,7 +163,7 @@ fun clientRegister(serverPid) {
     var localUuid = FuncsJS.getLocalUuid();
     print(localUuid);
     var message = (displayName=name, uuid=localUuid, dest="all", type="first", sdp="_", sdptype="_", iceCandidates="_");
-    serverPid ! Register(self(), serverPid, message);
+    serverPid ! Register(serverPid, self(), message);
     clientLoop()
 }
 
@@ -206,7 +206,7 @@ fun broadcast(clients, msg) server {
 # Loops, keeping track of the client PIDs
 fun serverLoop(clients) server {
     receive {
-        case Register(pid, serverPid, msg) ->
+        case Register(serverPid, pid, msg) ->
             var newClients = pid :: clients;
             # Broadcast a "New Client" message
             broadcast(newClients, Message(self(), msg));
