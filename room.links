@@ -1,0 +1,224 @@
+module FuncsJS {
+    alien javascript "js/jsfuncs.js" {
+        createUUID : () ~> (String);
+    }
+}
+
+open import MvuHTML;
+open import MvuAttrs;
+open import MvuEvents;
+open import MvuSubscriptions;
+import Mvu;
+import MvuCommands;
+
+fun broadcast(clients, msg) server {
+    switch (clients) {
+        case [] -> ()
+        case c::clients ->
+            c ! msg;
+            broadcast(clients, msg)
+    }
+}
+
+fun serverLoop(clients) server {
+    receive {
+        case Register(pid) ->
+            var newClients = pid :: clients;
+            serverLoop(newClients)
+
+        case Broadcast(msg) ->
+            broadcast(clients, Message(msg));
+            serverLoop(clients)
+    }
+}
+
+var serverPid = spawn { serverLoop([]) };
+
+typename Circle = (id: String, x : Float, y: Float, vx : Float, vy : Float);
+
+typename CircleState = [| Up | Down | Left | Right | Still |];
+
+typename Msg =
+  [| NewFrame
+   | MoveCircle : CircleState
+   | UpdateForeignCircle : Circle
+   | NoOp |];
+
+typename Room =
+  (circle : Circle, circleState : CircleState, others : [Circle]);
+
+var width = 700.0;
+var height = 700.0;
+var halfWidth = 350.0;
+var halfHeight = 350.0;
+var circleHeight = 30.0;
+var circleVelocity = 5.0;
+var uuid = FuncsJS.createUUID();
+
+var defaultRoom =
+  (circle = (id = uuid, x = halfWidth, y = halfHeight, vx = circleVelocity, vy = circleVelocity),
+    circleState = Still, others = []);
+
+fun animFrameHandler() {
+  animationFrame(fun(_) { NewFrame })
+}
+
+var upKey = "ArrowUp";
+var downKey = "ArrowDown";
+var leftKey = "ArrowLeft";
+var rightKey = "ArrowRight";
+var spaceKey = " ";
+
+
+fun keyDownHandler() {
+  open MvuSubscriptions;
+
+  onKeyDown(fun(evt) {
+    var keycode = evt.key;
+    if (keycode == upKey) {
+      MoveCircle(Up)
+    } else if (keycode == downKey) {
+      MoveCircle(Down)
+    } else if (keycode == leftKey) {
+      MoveCircle(Left)
+    } else if (keycode == rightKey) {
+      MoveCircle(Right)
+    } else {
+      NoOp
+    }
+  })
+}
+
+fun keyUpHandler() {
+  open MvuSubscriptions;
+
+  onKeyUp(fun(evt) {
+    var keycode = evt.key;
+    if (keycode == upKey || keycode == downKey || keycode == leftKey || keycode == rightKey) {
+      MoveCircle(Still)
+    } else {
+      NoOp
+    }
+  })
+}
+
+# Rendering
+var ae = MvuAttrs.empty;
+var he = MvuHTML.empty;
+fun ch(xs) { MvuHTML.concat(xs) }
+
+sig drawCircle : (Float,Float) -> HTML(Msg)
+fun drawCircle(x,y) {
+  div (class ("circle") +@
+       style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;"),
+       he)
+}
+
+sig listOfHTMLCircles : [Circle] -> HTML(Msg)
+fun listOfHTMLCircles(cs) {
+  switch(cs) {
+    case [] -> []
+    case circle:xs ->
+      ch([drawCircle(circle.x, circle.y), listOfHTMLCircles(xs)])
+  }
+}
+
+fun moveCircle(circle, direction) {
+  if (direction == Up) {
+    (circle with y = circle.y -. circleVelocity)
+  } else if (direction == Down) {
+    (circle with y = circle.y +. circleVelocity)
+  } else if (direction == Left) {
+    (circle with x = circle.x -. circleVelocity)
+  } else if (direction == Right) {
+    (circle with x = circle.x +. circleVelocity)
+  } else {
+    circle
+  }
+}
+
+fun removeCircle(c, cs) {
+  switch(cs) {
+    case [] -> []
+    case x:xs ->
+      if (x.id == c.id)
+        removeCircle(c, xs)
+      else
+        x :: removeCircle(c, xs)
+  }
+}
+
+sig updt : (Msg, Room) ~> Room
+fun updt(msg, room) {
+    switch(msg) {
+      case NewFrame ->
+        var newCircle = moveCircle(room.circle, room.circleState);
+        serverPid ! Broadcast(newCircle);
+        (room with circle = newCircle, circleState = room.circleState)
+      case MoveCircle(i) ->
+        var newCircle = moveCircle(room.circle, i);
+        serverPid ! Broadcast(newCircle);
+        (room with circle = newCircle, circleState = i)
+      case UpdateOtherCircle(c) ->
+        var removeOther = removeCircle(c, room.circle.others);
+        var addNewOther = c :: removeOther;
+        (room with others = addNewOther)
+      case NoOp -> room
+    }
+}
+
+sig view : (Room) ~> HTML(Msg)
+fun view(room) {
+  div (class ("canvas"), ch([
+    drawCircle(room.circle.x,room.circle.y),
+    ch(listOfHTMLCircles(room.others))
+  ]))
+}
+
+fun receivedMessage(msg) {
+  UpdateOtherCircle(msg)
+}
+
+sig subscriptions : (Room) -> Sub(Msg)
+fun subscriptions(model) {
+  animFrameHandler() +^ keyUpHandler() +^ keyDownHandler() +^ receivedMessage(msg)
+}
+
+fun clientLoop() {
+    receive {
+        case Message(msg) ->
+            receivedMessage(msg);
+            clientLoop()
+    }
+}
+
+fun clientRegister(serverPid) {
+    serverPid ! Register(self());
+    clientLoop()
+}
+
+fun mainPage(serverPid) {
+  var clientPid = spawnClient { clientRegister(serverPid) };
+  Mvu.run("placeholder", defaultRoom, view,
+      fun(msg, model) { (updt(msg, model), MvuCommands.empty) },
+      subscriptions, MvuCommands.empty);
+  page
+  <html>
+    <head>
+      <title>Room</title>
+      <link rel="stylesheet" href="css/pong.css" type="text/css" />
+    </head>
+    <body>
+      <div id="placeholder"></div>
+    </body>
+  </html>
+}
+
+fun main() {
+  addRoute("/", fun(_) { mainPage(serverPid) });
+  addStaticRoute("/css", "css", [("css", "text/css")]);
+  serveWebsockets();
+  servePages()
+}
+
+main()
