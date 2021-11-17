@@ -1,9 +1,3 @@
-module FuncsJS {
-    alien javascript "js/jsfuncs.js" {
-        createUUID : () ~> (String);
-    }
-}
-
 open import MvuHTML;
 open import MvuAttrs;
 open import MvuEvents;
@@ -38,26 +32,55 @@ typename Circle = (id: String, x : Float, y: Float, vx : Float, vy : Float);
 
 typename CircleState = [| Up | Down | Left | Right | Still |];
 
+# At the moment, the only message broadcast is a circle's co-ordinates
+typename ServerMessage = Circle;
+
 typename Msg =
   [| NewFrame
    | MoveCircle : CircleState
-   | UpdateForeignCircle : Circle
-   | NoOp |];
+   | NoOp
+   | ServerMsg:ServerMessage
+  |];
+
+typename RequestMsg = [| Message:ServerMessage | RetrieveMsg:Process({hear:ServerMessage}) |];
 
 typename Room =
-  (circle : Circle, circleState : CircleState, others : [Circle]);
+  (circle : Circle, circleState : CircleState, others : [Circle], pid:Process({hear:RequestMsg}));
 
 var width = 700.0;
 var height = 700.0;
 var halfWidth = 350.0;
 var halfHeight = 350.0;
-var circleHeight = 30.0;
 var circleVelocity = 5.0;
-var uuid = FuncsJS.createUUID();
 
-var defaultRoom =
-  (circle = (id = uuid, x = halfWidth, y = halfHeight, vx = circleVelocity, vy = circleVelocity),
-    circleState = Still, others = []);
+fun hex(dec) {
+  if (dec < 10) {
+    intToString(dec)
+  } else if (dec >= 10 && dec < 16) {
+    switch(dec) {
+      case 10 -> "a"
+      case 11 -> "b"
+      case 12 -> "c"
+      case 13 -> "d"
+      case 14 -> "e"
+      case 15 -> "f"
+    }
+  } else {
+    hex(dec / 16) ^^ hex(mod(dec, 16))
+  }
+}
+
+fun createUUID() {
+  fun s4() {
+    implode(tl(explode(hex(floatToInt(floor((1.0 +. random()) *. 65536.0))))))
+  }
+  s4() ^^ s4() ^^ "-" ^^ s4() ^^ "-" ^^ s4() ^^ "-" ^^ s4() ^^ "-" ^^ s4() ^^ s4() ^^ s4()
+}
+
+fun defaultRoom(clientPid) {
+  (circle = (id = createUUID(), x = halfWidth, y = halfHeight, vx = circleVelocity, vy = circleVelocity),
+    circleState = Still, others = [], pid = clientPid)
+}
 
 fun animFrameHandler() {
   animationFrame(fun(_) { NewFrame })
@@ -102,7 +125,6 @@ fun keyUpHandler() {
   })
 }
 
-# Rendering
 var ae = MvuAttrs.empty;
 var he = MvuHTML.empty;
 fun ch(xs) { MvuHTML.concat(xs) }
@@ -114,12 +136,12 @@ fun drawCircle(x,y) {
        he)
 }
 
-sig listOfHTMLCircles : [Circle] -> HTML(Msg)
+sig listOfHTMLCircles : ([Circle]) ~> [HTML(Msg)]
 fun listOfHTMLCircles(cs) {
   switch(cs) {
-    case [] -> []
-    case circle:xs ->
-      ch([drawCircle(circle.x, circle.y), listOfHTMLCircles(xs)])
+    case []         -> []
+    case circle::xs ->
+      drawCircle(circle.x, circle.y) :: listOfHTMLCircles(xs)
   }
 }
 
@@ -140,7 +162,7 @@ fun moveCircle(circle, direction) {
 fun removeCircle(c, cs) {
   switch(cs) {
     case [] -> []
-    case x:xs ->
+    case x::xs ->
       if (x.id == c.id)
         removeCircle(c, xs)
       else
@@ -148,22 +170,44 @@ fun removeCircle(c, cs) {
   }
 }
 
-sig updt : (Msg, Room) ~> Room
+sig retrieveServerMessage : (%) {}~> Msg
+fun retrieveServerMessage(pid) {
+  spawnWait {
+    pid ! RetrieveMsg(self());
+    receive {
+        case msg -> ServerMsg(msg)
+    }
+  }
+}
+
+# Currently, msg is a circle
+fun processServerMsg(msg, room) {
+    var c = msg;
+    var cid = c.id;
+    if (cid <> room.circle.id) {
+      var removeOther = removeCircle(c, room.others);
+      var addNewOther = c :: removeOther;
+      (room with others = addNewOther)
+    } else {
+      room
+    }
+}
+
+sig updt : (Msg, Room) ~> (Room, MvuCommands.Command(Msg))
 fun updt(msg, room) {
     switch(msg) {
       case NewFrame ->
         var newCircle = moveCircle(room.circle, room.circleState);
-        serverPid ! Broadcast(newCircle);
-        (room with circle = newCircle, circleState = room.circleState)
+        ((room with circle = newCircle, circleState = room.circleState), MvuCommands.empty)
       case MoveCircle(i) ->
         var newCircle = moveCircle(room.circle, i);
         serverPid ! Broadcast(newCircle);
-        (room with circle = newCircle, circleState = i)
-      case UpdateOtherCircle(c) ->
-        var removeOther = removeCircle(c, room.circle.others);
-        var addNewOther = c :: removeOther;
-        (room with others = addNewOther)
-      case NoOp -> room
+        ((room with circle = newCircle, circleState = i), MvuCommands.empty)
+      case NoOp -> (room, MvuCommands.empty)
+      case ServerMsg(msg) ->
+        var room = processServerMsg(msg, room);
+        var f = fun() { retrieveServerMessage(room.pid) };
+        (room, Spawn(f))
     }
 }
 
@@ -175,33 +219,47 @@ fun view(room) {
   ]))
 }
 
-fun receivedMessage(msg) {
-  UpdateOtherCircle(msg)
-}
-
 sig subscriptions : (Room) -> Sub(Msg)
 fun subscriptions(model) {
-  animFrameHandler() +^ keyUpHandler() +^ keyDownHandler() +^ receivedMessage(msg)
+  animFrameHandler() +^ keyUpHandler() +^ keyDownHandler()
 }
 
-fun clientLoop() {
+
+fun drain(msgs, pids) {
+    switch (msgs) {
+        case [] -> (msgs, pids)
+        case msg :: msgs ->
+            switch (pids) {
+                case [] -> (msgs, pids)
+                case pid :: pids ->
+                    pid ! msg;
+                    (msgs, pids)
+            }
+    }
+}
+
+# Invariant: At least one of msgs, pids is empty.
+fun clientLoop(msgs, pids) {
     receive {
         case Message(msg) ->
-            receivedMessage(msg);
-            clientLoop()
+            var (msgs, pids) = drain(msgs ++ [msg], pids);
+            clientLoop(msgs, pids)
+        case RetrieveMsg(pid) ->
+            var (msgs, pids) = drain(msgs, pids ++ [pid]);
+            clientLoop(msgs, pids)
     }
 }
 
 fun clientRegister(serverPid) {
     serverPid ! Register(self());
-    clientLoop()
+    clientLoop([], [])
 }
 
 fun mainPage(serverPid) {
   var clientPid = spawnClient { clientRegister(serverPid) };
-  Mvu.run("placeholder", defaultRoom, view,
-      fun(msg, model) { (updt(msg, model), MvuCommands.empty) },
-      subscriptions, MvuCommands.empty);
+  Mvu.run("placeholder", defaultRoom(clientPid), view,
+      updt,
+      subscriptions, MvuCommands.spawnProc(fun () { retrieveServerMessage(clientPid) }));
   page
   <html>
     <head>
@@ -217,6 +275,7 @@ fun mainPage(serverPid) {
 fun main() {
   addRoute("/", fun(_) { mainPage(serverPid) });
   addStaticRoute("/css", "css", [("css", "text/css")]);
+  addStaticRoute("/js", "js", [("css", "text/javascript")]);
   serveWebsockets();
   servePages()
 }
