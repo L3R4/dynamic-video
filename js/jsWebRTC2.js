@@ -1,15 +1,9 @@
 // MATH
-function _floor(n) {
-  return Math.floor(n);
+function _root(x) {
+  return Math.sqrt(x);
 }
 
-function _random() {
-  return Math.random();
-}
-
-var floor = LINKS.kify(_floor);
-var random = LINKS.kify(_random);
-
+var root = LINKS.kify(_root);
 
 // STRINGS
 function _objToStr(obj) {
@@ -40,7 +34,7 @@ var constraints = {
       height: {max: 240},
       frameRate: {max: 30},
     },
-    audio: false,
+    audio: true,
   };
 
 let localDisplayName = "";
@@ -49,7 +43,14 @@ let localStreamLoaded = false;
 let localStream;
 let messageString = "Still waiting";
 
-function _getResponseIfFinished() {
+function _getResponseIfFinished(msg) {
+  if (msg != "start") {
+    let signal = JSON.parse(msg);
+    let peerUuid = signal.uuid;
+    if (peerConnections[peerUuid]) {
+      if (peerConnections[peerUuid].connected) return "connected";
+    }
+  }
   let str = messageString;
   messageString = "Still waiting";
   return str;
@@ -102,6 +103,7 @@ function _gotMessageFromServer(message) {
 function setUpPeer(peerUuid, displayName, initCall = false) {
   peerConnections[peerUuid] = {'displayName': displayName,
                                'pc': new RTCPeerConnection(peerConnectionConfig),
+                               'connected': false,
                                'iceCandidates': []};
   peerConnections[peerUuid].pc.onicecandidate = event => {
     if (event.candidate != null) {
@@ -125,26 +127,35 @@ function createdDescription(description, peerUuid) {
 }
 
 function gotRemoteStream(event, peerUuid) {
+  //if (peerConnections[peerUuid].gotVideo) return;
+  peerConnections[peerUuid].gotVideo = true;
   console.log(`got remote stream, peer ${peerUuid}`);
-  //assign stream to new HTML video element
-  var vidElement = document.createElement('video');
-  vidElement.setAttribute('autoplay', 'true');
-  vidElement.srcObject = event.streams[0];
 
-  var vidContainer = document.createElement('div');
-  vidContainer.setAttribute('id', 'remoteVideo_' + peerUuid);
-  vidContainer.setAttribute('class', 'videoContainer');
-  vidContainer.appendChild(vidElement);
+  if (document.getElementById('remoteVideo_' + peerUuid)) {
+    var vid = document.getElementById('vid_' + peerUuid);
+    vid.srcObject = event.streams[0];
+  } else {
+    var vidElement = document.createElement('video');
+    vidElement.setAttribute('id', 'vid_' + peerUuid);
+    vidElement.setAttribute('autoplay', 'true');
+    vidElement.srcObject = event.streams[0];
 
-  document.getElementById('videos').appendChild(vidContainer);
+    var vidContainer = document.createElement('div');
+    vidContainer.setAttribute('id', 'remoteVideo_' + peerUuid);
+    vidContainer.setAttribute('class', 'videoContainer');
+    vidContainer.appendChild(vidElement);
+    document.getElementById('otherVideos').appendChild(vidContainer);
+  }
+
 }
 
 function checkPeerDisconnect(event, peerUuid) {
   var state = peerConnections[peerUuid].pc.iceConnectionState;
+  if (state === "connected") peerConnections[peerUuid].connected = true;
   console.log(`connection with peer ${peerUuid} ${state}`);
   if (state === "failed" || state === "closed" || state === "disconnected") {
     delete peerConnections[peerUuid];
-    document.getElementById('videos').removeChild(document.getElementById('remoteVideo_' + peerUuid));
+    document.getElementById('otherVideos').removeChild(document.getElementById('remoteVideo_' + peerUuid));
   }
 }
 
@@ -198,6 +209,15 @@ function _attachWebCam(vidID) {
   });
 }
 
+function _togglePeerCamera(id, mode) {
+  var elem = document.getElementById('remoteVideo_' + id);
+  if (mode == "show") {
+    elem.style.display = "block";
+  } else {
+    elem.style.display = "none";
+  }
+}
+
 function errorHandler(error) {
   console.log(error);
 }
@@ -210,9 +230,15 @@ function createUUID() {
   return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
 }
 
+function _getUUID() {
+  return localUuid;
+}
+
 var getInitialMessage = LINKS.kify(_getInitialMessage);
 var gotMessageFromServer = LINKS.kify(_gotMessageFromServer);
 var getResponseIfFinished = LINKS.kify(_getResponseIfFinished);
 var collectCandidates = LINKS.kify(_collectCandidates);
 var attachWebCam = LINKS.kify(_attachWebCam);
 var webCamLoaded = LINKS.kify(_webCamLoaded);
+var getUUID = LINKS.kify(_getUUID);
+var togglePeerCamera = LINKS.kify(_togglePeerCamera);

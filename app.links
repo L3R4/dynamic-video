@@ -1,39 +1,370 @@
-fun onKeyDown() {
-  ()
+open import MvuHTML;
+open import MvuAttrs;
+open import MvuEvents;
+open import MvuSubscriptions;
+import Mvu;
+import MvuCommands;
+
+module JSWebRTC {
+    alien javascript "js/JSWebRTC2.js" {
+        webCamLoaded : () ~> (String);
+        attachWebCam : (String) ~> ();
+        getInitialMessage : () ~> ();
+        gotMessageFromServer : (String) ~> ();
+        getResponseIfFinished : (String) ~> (String);
+        collectCandidates : () ~> (String);
+        getUUID : () ~> (String);
+        root : (Float) ~> (Float);
+        togglePeerCamera : (String, String) ~> ();
+    }
 }
 
-fun clientLoop() {
-  ()
+fun broadcast(clients, msg) server {
+    switch (clients) {
+        case [] -> ()
+        case c::clients ->
+            c ! msg;
+            broadcast(clients, msg)
+    }
 }
 
-fun mainPage(_) {
-  var clientID = spawnClient {clientLoop()};
+fun serverLoop(clients) server {
+    receive {
+        case Register(pid, msg) ->
+          var newClients = pid :: clients;
+          broadcast(newClients, ConnectionMessage(msg));
+          serverLoop(newClients)
+        case BcastConnectMsg(msg) ->
+          broadcast(clients, ConnectionMessage(msg));
+          serverLoop(clients)
+        case BcastModelMsg(msg) ->
+          broadcast(clients, ModelMessage(msg));
+          serverLoop(clients)
+    }
+}
+
+var serverPid = spawn { serverLoop([]) };
+
+typename Circle = (id: String, x : Float, y: Float, vx : Float, vy : Float);
+
+typename CircleState = [| Up | Down | Left | Right | Still |];
+
+typename ServerMessage = Circle;
+
+typename Msg =
+  [| NewFrame
+   | MoveCircle : CircleState
+   | Joined
+   | NoOp
+   | ServerMsg:ServerMessage
+  |];
+
+typename RequestMsg =
+  [| ConnectionMessage:String | ModelMessage:ServerMessage | RetrieveMsg:Process({hear:ServerMessage}) |];
+
+typename Room =
+  (circle : Circle, circleState : CircleState, joined : Bool, others : [Circle], pid:Process({hear:RequestMsg}));
+
+var width = 700.0;
+var height = 700.0;
+var halfWidth = 350.0;
+var halfHeight = 350.0;
+var circleVelocity = 5.0;
+
+fun defaultRoom(clientPid) {
+  (circle = (id = "None", x = halfWidth, y = halfHeight, vx = circleVelocity, vy = circleVelocity),
+    circleState = Still, joined = false, others = [], pid = clientPid)
+}
+
+fun waitForWebCam() {
+  var result = JSWebRTC.webCamLoaded();
+  if (result == "true")
+    ()
+  else
+    waitForWebCam()
+}
+
+fun displayWebCam() {
+  var videoXML = <video id="localVideo" autoplay="true">Not supported</video>;
+  appendChildren(videoXML, getNodeById("localVid"));
+  JSWebRTC.attachWebCam("localVideo")
+}
+
+fun checkForIceCandidates() {
+  var candidates = JSWebRTC.collectCandidates();
+  if (candidates <> "No candidates") {
+    serverPid ! BcastConnectMsg(candidates);
+    checkForIceCandidates()
+  } else {
+    checkForIceCandidates()
+  }
+}
+
+fun waitForResponse(msg) {
+  var res = JSWebRTC.getResponseIfFinished(msg);
+  switch (res) {
+    case "Not for us" ->
+      "Not for us"
+    case "Still waiting" ->
+      waitForResponse(msg)
+    case other ->
+      res
+  }
+}
+
+fun receivedMessage(msg) {
+  JSWebRTC.gotMessageFromServer(msg);
+  print("start");
+  var res = waitForResponse(msg);
+  print("finish");
+  if (res == "connected") {
+    ()
+  } else if (res <> "Not for us") {
+    serverPid ! BcastConnectMsg(res);
+    ()
+  } else {
+    ()
+  }
+}
+
+fun animFrameHandler() {
+  animationFrame(fun(_) { NewFrame })
+}
+
+var upKey = "ArrowUp";
+var downKey = "ArrowDown";
+var leftKey = "ArrowLeft";
+var rightKey = "ArrowRight";
+var spaceKey = " ";
+
+
+fun keyDownHandler() {
+  open MvuSubscriptions;
+
+  onKeyDown(fun(evt) {
+    var keycode = evt.key;
+    if (keycode == upKey) {
+      MoveCircle(Up)
+    } else if (keycode == downKey) {
+      MoveCircle(Down)
+    } else if (keycode == leftKey) {
+      MoveCircle(Left)
+    } else if (keycode == rightKey) {
+      MoveCircle(Right)
+    } else if (keycode == spaceKey) {
+      Joined
+    } else {
+      NoOp
+    }
+  })
+}
+
+fun keyUpHandler() {
+  open MvuSubscriptions;
+
+  onKeyUp(fun(evt) {
+    var keycode = evt.key;
+    if (keycode == upKey || keycode == downKey || keycode == leftKey || keycode == rightKey) {
+      MoveCircle(Still)
+    } else {
+      NoOp
+    }
+  })
+}
+
+var ae = MvuAttrs.empty;
+var he = MvuHTML.empty;
+fun ch(xs) { MvuHTML.concat(xs) }
+
+sig drawCircle : (Float,Float) -> HTML(Msg)
+fun drawCircle(x,y) {
+  div (class ("circle") +@
+       style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;"),
+       he)
+}
+
+sig listOfHTMLCircles : ([Circle]) ~> [HTML(Msg)]
+fun listOfHTMLCircles(cs) {
+  switch(cs) {
+    case []         -> []
+    case circle::xs ->
+      drawCircle(circle.x, circle.y) :: listOfHTMLCircles(xs)
+  }
+}
+
+fun moveCircle(circle, direction) {
+  if (direction == Up) {
+    (circle with y = circle.y -. circleVelocity)
+  } else if (direction == Down) {
+    (circle with y = circle.y +. circleVelocity)
+  } else if (direction == Left) {
+    (circle with x = circle.x -. circleVelocity)
+  } else if (direction == Right) {
+    (circle with x = circle.x +. circleVelocity)
+  } else {
+    circle
+  }
+}
+
+fun removeCircle(c, cs) {
+  switch(cs) {
+    case [] -> []
+    case x::xs ->
+      if (x.id == c.id)
+        removeCircle(c, xs)
+      else
+        x :: removeCircle(c, xs)
+  }
+}
+
+sig retrieveServerMessage : (%) {}~> Msg
+fun retrieveServerMessage(pid) {
+  spawnWait {
+    pid ! RetrieveMsg(self());
+    receive {
+        case msg -> ServerMsg(msg)
+    }
+  }
+}
+
+sig closeEnough : (Circle, Circle) ~> ()
+fun closeEnough(c1, c2) {
+  var distance = JSWebRTC.root((c2.x -. c1.x)^.2.0 +. (c2.y -. c1.y)^.2.0);
+  if (distance <= 100.0) {
+    JSWebRTC.togglePeerCamera(c1.id, "show")
+  } else {
+    JSWebRTC.togglePeerCamera(c1.id, "hide")
+  }
+}
+
+fun closeToOthers(c, others) {
+  switch(others) {
+    case [] -> ()
+    case x::xs ->
+      closeEnough(x, c);
+      closeToOthers(c, xs)
+  }
+}
+
+# Currently, msg is a circle
+sig processServerMsg : (Circle, Room) ~> Room
+fun processServerMsg(msg, room) {
+    var c = msg;
+    if (c.id <> room.circle.id) {
+      closeEnough(c, room.circle);
+      var removeOther = removeCircle(c, room.others);
+      var addNewOther = c :: removeOther;
+      (room with others = addNewOther)
+    } else {
+      room
+    }
+}
+
+sig updt : (Msg, Room) ~> (Room, MvuCommands.Command(Msg))
+fun updt(msg, room) {
+  switch(msg) {
+    case NewFrame ->
+      var newCircle = moveCircle(room.circle, room.circleState);
+      ((room with circle = newCircle, circleState = room.circleState), MvuCommands.empty)
+    case MoveCircle(i) ->
+      if (room.joined == true) {
+        var newCircle = moveCircle(room.circle, i);
+        closeToOthers(newCircle, room.others);
+        serverPid ! BcastModelMsg(newCircle);
+        ((room with circle = newCircle, circleState = i), MvuCommands.empty)
+      } else {
+        (room, MvuCommands.empty)
+      }
+    case Joined ->
+      var c = (room.circle with id = JSWebRTC.getUUID());
+      serverPid ! BcastModelMsg(c);
+      ((room with circle = c, joined = true), MvuCommands.empty)
+    case NoOp -> (room, MvuCommands.empty)
+    case ServerMsg(msg) ->
+      var room = processServerMsg(msg, room);
+      var f = fun() { retrieveServerMessage(room.pid) };
+      (room, Spawn(f))
+  }
+}
+
+sig view : (Room) ~> HTML(Msg)
+fun view(room) {
+  div (class ("canvas"), ch([
+    drawCircle(room.circle.x,room.circle.y),
+    ch(listOfHTMLCircles(room.others))
+  ]))
+}
+
+sig subscriptions : (Room) -> Sub(Msg)
+fun subscriptions(model) {
+  animFrameHandler() +^ keyUpHandler() +^ keyDownHandler()
+}
+
+
+fun drain(msgs, pids) {
+    switch (msgs) {
+        case [] -> (msgs, pids)
+        case msg :: msgs ->
+            switch (pids) {
+                case [] -> (msgs, pids)
+                case pid :: pids ->
+                    pid ! msg;
+                    (msgs, pids)
+            }
+    }
+}
+
+# Invariant: At least one of msgs, pids is empty.
+fun clientLoop(msgs, pids) {
+    receive {
+      case ConnectionMessage(msg) ->
+        var dealWithMsg = receivedMessage(msg);
+        clientLoop(msgs, pids)
+      case ModelMessage(msg) ->
+        print("received message");
+        var (msgs, pids) = drain(msgs ++ [msg], pids);
+        clientLoop(msgs, pids)
+      case RetrieveMsg(pid) ->
+        print("Got this");
+        var (msgs, pids) = drain(msgs, pids ++ [pid]);
+        clientLoop(msgs, pids)
+    }
+}
+
+fun clientRegister() {
+  displayWebCam();
+  waitForWebCam();
+  JSWebRTC.getInitialMessage();
+  var res = waitForResponse("start");
+  var iceId = spawnClient { checkForIceCandidates() };
+  serverPid ! Register(self(), res);
+  clientLoop([], [])
+}
+
+fun mainPage(serverPid) {
+  var clientPid = spawnClient { clientRegister() };
+  Mvu.run("placeholder", defaultRoom(clientPid), view,
+      updt,
+      subscriptions, MvuCommands.spawnProc(fun () { retrieveServerMessage(clientPid) }));
   page
-    <html>
-      <head>
-        <style>
-          #circle {{
-            height: 50px;
-            width: 50px;
-            background-color: #555;
-            border-radius: 50%;
-            position: relative;
-            left: 500px;
-            top: 300px;
-            bottom: 0px;
-            right: 0px;
-          }}
-        </style>
-      </head>
-      <body>
-        <div id="circle"/>
-      </body>
-    </html>
+  <html>
+    <head>
+      <title>Room</title>
+      <link rel="stylesheet" href="css/room.css" type="text/css" />
+    </head>
+    <body>
+      <div id="placeholder"></div>
+      <div id="localVid"></div>
+      <div id="otherVideos"></div>
+    </body>
+  </html>
 }
 
 fun main() {
-  addRoute("/", mainPage);
-  addStaticRoute("/js", "js", [("js", "text/javascript")]);
+  addRoute("/", fun(_) { mainPage(serverPid) });
+  addStaticRoute("/css", "css", [("css", "text/css")]);
+  addStaticRoute("/js", "js", [("css", "text/javascript")]);
+  serveWebsockets();
   servePages()
 }
 
