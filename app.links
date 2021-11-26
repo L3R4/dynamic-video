@@ -318,14 +318,12 @@ fun drain(msgs, pids) {
 fun clientLoop(msgs, pids) {
     receive {
       case ConnectionMessage(msg) ->
-        var dealWithMsg = receivedMessage(msg);
+        receivedMessage(msg);
         clientLoop(msgs, pids)
       case ModelMessage(msg) ->
-        print("received message");
         var (msgs, pids) = drain(msgs ++ [msg], pids);
         clientLoop(msgs, pids)
       case RetrieveMsg(pid) ->
-        print("Got this");
         var (msgs, pids) = drain(msgs, pids ++ [pid]);
         clientLoop(msgs, pids)
     }

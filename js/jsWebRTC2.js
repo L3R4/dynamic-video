@@ -57,6 +57,7 @@ function _getResponseIfFinished(msg) {
 }
 
 function _getInitialMessage() {
+  console.log(localUuid);
   localDisplayName = prompt('Enter your name', '');
   let msg = JSON.stringify({'displayName': localDisplayName,
                             'uuid': localUuid,
@@ -96,6 +97,7 @@ function _gotMessageFromServer(message) {
 
   } else if (signal.ice) {
     addCandidates(signal.ice, peerUuid);
+    messageString = "Not for us";
     return;
   }
 }
@@ -211,10 +213,14 @@ function _attachWebCam(vidID) {
 
 function _togglePeerCamera(id, mode) {
   var elem = document.getElementById('remoteVideo_' + id);
-  if (mode == "show") {
-    elem.style.display = "block";
+  if (elem) {
+    if (mode == "show") {
+      elem.style.display = "block";
+    } else {
+      elem.style.display = "none";
+    }
   } else {
-    elem.style.display = "none";
+    console.log("stupid id = " + id);
   }
 }
 
