@@ -21,6 +21,40 @@ body {
   position: absolute;
 }
 
+.canvas2 {
+  width: 700px;
+  height: 700px;
+  background-color: rgb(255,255,255);
+  left: 400px;
+  top: 50px;
+  position: absolute;
+}
+
+.welcomeText {
+  width: 300px;
+  height: 50px;
+  left: 275px;
+  position: absolute;
+  font-family: verdana;
+}
+
+.instructions {
+  width: 300px;
+  height: 50px;
+  left: 275px;
+  top: 300px;
+  position: absolute;
+  font-family: verdana;
+}
+
+.circleName {
+  top: 20px;
+  left: -10px;
+  position: absolute;
+  font-family: verdana;
+  color: rgb(255, 255, 255);
+}
+
 #localVid {
   position: absolute;
   left: 1200px;

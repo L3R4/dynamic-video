@@ -1,33 +1,3 @@
-// MATH
-function _floor(n) {
-  return Math.floor(n);
-}
-
-function _random() {
-  return Math.random();
-}
-
-var floor = LINKS.kify(_floor);
-var random = LINKS.kify(_random);
-
-
-// STRINGS
-function _objToStr(obj) {
-  let str = obj._value;
-  return str;
-}
-
-function _sub(str, start, finish) {
-  return str.substring(start, finish);
-}
-
-var objToStr = LINKS.kify(_objToStr);
-var sub = LINKS.kify(_sub);
-
-// OTHER
-
-
-// WEBRTC
 let peerConnections = {};
 
 let peerConnectionConfig = {
@@ -48,7 +18,7 @@ var constraints = {
       height: {max: 240},
       frameRate: {max: 30},
     },
-    audio: false,
+    audio: true,
   };
 
 function _webCamLoaded() {
@@ -63,7 +33,6 @@ function _attachWebCam(vidID) {
   const videoElement = document.querySelector('video#' + vidID);
   navigator.mediaDevices.getUserMedia(constraints).then(stream => {
     localStream = stream;
-    console.log(stream.getVideoTracks());
     videoElement.srcObject = stream;
     localStreamLoaded = true;
   }).catch(error => {
@@ -107,7 +76,6 @@ function _makeAnswer(peerUuid) {
 
 function createdDescription(description, peerUuid) {
   peerConnections[peerUuid].pc.setLocalDescription(description).then(function () {
-    console.log(peerConnections[peerUuid].pc.localDescription);
     peerConnections[peerUuid].localDescSet = true;
   });
 }
@@ -123,7 +91,6 @@ function _offerCompleted(peerUuid) {
 function _receivedDescription(peerUuid, desc) {
   let sdpObj = JSON.parse(desc);
   peerConnections[peerUuid].pc.setRemoteDescription(new RTCSessionDescription(sdpObj.sdp)).then(function() {
-    console.log(peerConnections[peerUuid].pc.remoteDescription);
     peerConnections[peerUuid].remoteDescSet = true;
   });
 }
@@ -138,17 +105,22 @@ function _remoteDescriptionSet(peerUuid) {
 
 function gotRemoteStream(event, peerUuid) {
   console.log(`got remote stream, peer ${peerUuid}`);
-  //assign stream to new HTML video element
-  var vidElement = document.createElement('video');
-  vidElement.setAttribute('autoplay', 'true');
-  vidElement.srcObject = event.streams[0];
 
-  var vidContainer = document.createElement('div');
-  vidContainer.setAttribute('id', 'remoteVideo_' + peerUuid);
-  vidContainer.setAttribute('class', 'videoContainer');
-  vidContainer.appendChild(vidElement);
+  if (!document.getElementById('remoteVideo_' + peerUuid)) {
+    var vidElement = document.createElement('video');
+    vidElement.setAttribute('id', peerUuid);
+    vidElement.setAttribute('autoplay', 'true');
+    vidElement.setAttribute('muted', 'true')
+    vidElement.srcObject = event.streams[0];
 
-  document.getElementById('videos').appendChild(vidContainer);
+    var vidContainer = document.createElement('div');
+    vidContainer.setAttribute('id', 'remoteVideo_' + peerUuid);
+    vidContainer.setAttribute('class', 'videoContainer');
+    vidContainer.style.display = "none";
+    vidContainer.appendChild(vidElement);
+
+    document.getElementById('otherVideos').appendChild(vidContainer);
+  }
 }
 
 function checkPeerDisconnect(event, peerUuid) {
@@ -156,7 +128,7 @@ function checkPeerDisconnect(event, peerUuid) {
   console.log(`connection with peer ${peerUuid} ${state}`);
   if (state === "failed" || state === "closed" || state === "disconnected") {
     delete peerConnections[peerUuid];
-    document.getElementById('videos').removeChild(document.getElementById('remoteVideo_' + peerUuid));
+    document.getElementById('otherVideos').removeChild(document.getElementById('remoteVideo_' + peerUuid));
   }
 }
 
@@ -183,8 +155,6 @@ function _addCandidates(candidates, peerId) {
     if (uuid == localUuid) {
       let iceList = iceCandidates[uuid];
       for (let i = 0; i < iceList.length; i++) {
-        console.log("ADDING");
-        console.log(iceList[i]);
         peerConnections[peerId].pc.addIceCandidate(new RTCIceCandidate(iceList[i]));
       }
     }
