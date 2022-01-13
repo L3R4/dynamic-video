@@ -8,15 +8,15 @@ let peerConnectionConfig = {
 };
 
 let localUuid = "";
-let localDisplayName = "";
+let localDisplayName = "Nothing";
 let localStreamLoaded = false;
 let localStream;
 
 var constraints = {
     video: {
-      width: {max: 320},
-      height: {max: 240},
-      frameRate: {max: 30},
+      width: {max: 200},
+      height: {max: 150},
+      frameRate: {max: 60},
     },
     audio: true,
   };
@@ -34,23 +34,15 @@ function _attachWebCam(vidID) {
   navigator.mediaDevices.getUserMedia(constraints).then(stream => {
     localStream = stream;
     videoElement.srcObject = stream;
+    videoElement.muted = true;
     localStreamLoaded = true;
   }).catch(error => {
     console.error('Error opening video camera.', error);
   });
 }
 
-function _setLocalDisplayName() {
-  localDisplayName = prompt('Enter your name', '')
-}
-
-function _getLocalDisplayName() {
-  return localDisplayName;
-}
-
-function _setUpPeer(peerUuid, displayName) {
-  peerConnections[peerUuid] = {'displayName': displayName,
-                              'pc': new RTCPeerConnection(peerConnectionConfig),
+function _setUpPeer(peerUuid) {
+  peerConnections[peerUuid] = {'pc': new RTCPeerConnection(peerConnectionConfig),
                               'iceCandidates': [],
                               'localDescSet': false,
                               'remoteDescSet': false};
@@ -62,7 +54,13 @@ function _setUpPeer(peerUuid, displayName) {
   peerConnections[peerUuid].pc.ontrack = event => {
     gotRemoteStream(event, peerUuid);
   }
-  peerConnections[peerUuid].pc.oniceconnectionstatechange = event => checkPeerDisconnect(event, peerUuid);
+  peerConnections[peerUuid].pc.oniceconnectionstatechange = event => {
+    checkPeerStateChange(event, peerUuid);
+  }
+  peerConnections[peerUuid].pc.addStream(localStream);
+}
+
+function _addStreamToConnectionWithPeer(peerUuid) {
   peerConnections[peerUuid].pc.addStream(localStream);
 }
 
@@ -109,8 +107,7 @@ function gotRemoteStream(event, peerUuid) {
   if (!document.getElementById('remoteVideo_' + peerUuid)) {
     var vidElement = document.createElement('video');
     vidElement.setAttribute('id', peerUuid);
-    vidElement.setAttribute('autoplay', 'true');
-    vidElement.setAttribute('muted', 'true')
+    vidElement.setAttribute('class', 'webcam');
     vidElement.srcObject = event.streams[0];
 
     var vidContainer = document.createElement('div');
@@ -123,9 +120,9 @@ function gotRemoteStream(event, peerUuid) {
   }
 }
 
-function checkPeerDisconnect(event, peerUuid) {
+function checkPeerStateChange(event, peerUuid) {
   var state = peerConnections[peerUuid].pc.iceConnectionState;
-  console.log(`connection with peer ${peerUuid} ${state}`);
+  console.log(`connection with peer, ${peerUuid} ${state}`);
   if (state === "failed" || state === "closed" || state === "disconnected") {
     delete peerConnections[peerUuid];
     document.getElementById('otherVideos').removeChild(document.getElementById('remoteVideo_' + peerUuid));
@@ -177,9 +174,8 @@ var webCamLoaded = LINKS.kify(_webCamLoaded);
 var attachWebCam = LINKS.kify(_attachWebCam);
 var setLocalUuid = LINKS.kify(_setLocalUuid);
 var getLocalUuid = LINKS.kify(_getLocalUuid);
-var setLocalDisplayName = LINKS.kify(_setLocalDisplayName);
-var getLocalDisplayName = LINKS.kify(_getLocalDisplayName);
 var setUpPeer = LINKS.kify(_setUpPeer);
+let addStreamToConnectionWithPeer = LINKS.kify(_addStreamToConnectionWithPeer);
 var makeOffer = LINKS.kify(_makeOffer);
 var makeAnswer = LINKS.kify(_makeAnswer);
 var offerCompleted = LINKS.kify(_offerCompleted);

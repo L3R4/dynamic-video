@@ -4,9 +4,7 @@ module JSWebRTC {
         attachWebCam : (String) ~> ();
         setLocalUuid : () ~> ();
         getLocalUuid : () ~> (String);
-        setLocalDisplayName : () ~> ();
-        getLocalDisplayName : () ~> (String);
-        setUpPeer : (String, String) ~> ();
+        setUpPeer : (String) ~> ();
         makeOffer : (String) ~> ();
         makeAnswer : (String) ~> ();
         offerCompleted : (String) ~> (String);
@@ -31,7 +29,6 @@ fun serverLoop(clients) server {
     receive {
         case Register(pid, msg) ->
             var newClients = pid :: clients;
-            # Broadcast a "New Client" message
             broadcast(newClients, Message(msg));
             serverLoop(newClients)
 
@@ -47,7 +44,7 @@ fun checkForIceCandidates() {
   var candidates = JSWebRTC.collectCandidates();
   if (candidates <> "No candidates") {
     var localUuid = JSWebRTC.getLocalUuid();
-    var message = (displayName="_", uuid=localUuid, dest="all", type="ice", sdp="_", sdptype="_", iceCandidates=candidates);
+    var message = (uuid=localUuid, dest="all", type="ice", sdp="_", sdptype="_", iceCandidates=candidates);
     serverPid ! Broadcast(message);
     checkForIceCandidates()
   } else {
@@ -58,9 +55,8 @@ fun checkForIceCandidates() {
 fun waitForOffer(peerUuid, sdpType) {
   var result = JSWebRTC.offerCompleted(peerUuid);
   if (result <> "Not finished") {
-    var name = JSWebRTC.getLocalDisplayName();
     var localUuid = JSWebRTC.getLocalUuid();
-    var message = (displayName=name, uuid=localUuid, dest=peerUuid, type="sdp", sdp=result, sdptype=sdpType, iceCandidates="_");
+    var message = (uuid=localUuid, dest=peerUuid, type="sdp", sdp=result, sdptype=sdpType, iceCandidates="_");
     serverPid ! Broadcast(message);
     ()
   } else {
@@ -76,8 +72,8 @@ fun waitForRemoteDescSet(peerUuid) {
     waitForRemoteDescSet(peerUuid)
 }
 
-fun setUpNewPeer(peerUuid, dispName, initCall) {
-  JSWebRTC.setUpPeer(peerUuid, dispName);
+fun setUpNewPeer(peerUuid, initCall) {
+  JSWebRTC.setUpPeer(peerUuid);
   if (initCall == true) {
     JSWebRTC.makeOffer(peerUuid);
     waitForOffer(peerUuid, "offer");
@@ -101,20 +97,18 @@ fun dealWithMessage(msg) {
   var peerUuid = msg.uuid;
   var msgDest = msg.dest;
   var msgType = msg.type;
-  var dispName = msg.displayName;
   if (peerUuid == localUuid || (msgDest <> localUuid && msgDest <> "all")) {
     ()
   } else {
     switch (msgType) {
       case "first" ->
-        setUpNewPeer(peerUuid, dispName, false);
+        setUpNewPeer(peerUuid, false);
         var iceId = spawnClient { checkForIceCandidates() };
-        var localName = JSWebRTC.getLocalDisplayName();
-        var message = (displayName=localName, uuid=localUuid, dest=msgDest, type="response", sdp="_", sdptype="_", iceCandidates="_");
+        var message = (uuid=localUuid, dest=msgDest, type="response", sdp="_", sdptype="_", iceCandidates="_");
         serverPid ! Broadcast(message);
         ()
       case "response" ->
-        setUpNewPeer(peerUuid, dispName, true);
+        setUpNewPeer(peerUuid, true);
         var iceId2 = spawnClient { checkForIceCandidates() };
         ()
       case "sdp" ->
@@ -146,14 +140,15 @@ fun waitForWebCam() {
 
 fun displayWebCam() {
   var videoXML = <div id="localVideo" class="videoContainer">
-                   <video id="videoid" autoplay="true">Not supported</video>
+                   <video id="videoid" class="webcam" autoplay="true">Not supported</video>
                  </div>;
   appendChildren(videoXML, getNodeById("localVid"));
-  JSWebRTC.attachWebCam("videoid")
+  JSWebRTC.attachWebCam("videoid");
+  var elem = getNodeById("localVideo");
+  domSetAttributeFromRef(elem, "style", "display: none")
 }
 
-### CLIENT
-## Loop thread run on the client, listens for messages from the server
+# Loop thread run on the client, listens for messages from the server
 fun clientLoop() {
     receive {
         case Message(msg) ->
@@ -163,24 +158,17 @@ fun clientLoop() {
 }
 
 fun clientRegister() {
-    JSWebRTC.setLocalDisplayName();
     JSWebRTC.setLocalUuid();
-    var name = JSWebRTC.getLocalDisplayName();
     displayWebCam();
     waitForWebCam();
     var localUuid = JSWebRTC.getLocalUuid();
-    print(localUuid);
-    var message = (displayName=name, uuid=localUuid, dest="all", type="first", sdp="_", sdptype="_", iceCandidates="_");
+    var message = (uuid=localUuid, dest="all", type="first", sdp="_", sdptype="_", iceCandidates="_");
     serverPid ! Register(self(), message);
     clientLoop()
 }
 
 fun getUUID() {
   JSWebRTC.getLocalUuid()
-}
-
-fun getDisplayName() {
-  JSWebRTC.getLocalDisplayName()
 }
 
 fun beginConnection() {
