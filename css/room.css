@@ -90,7 +90,7 @@ body {
   border-radius: 25%;
 }
 
-#localVid {
+#localVideoDiv {
   position: absolute;
   left: 1150px;
   top: 500px;

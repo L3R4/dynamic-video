@@ -4,12 +4,11 @@ open import MvuEvents;
 open import MvuSubscriptions;
 import Mvu;
 import MvuCommands;
-#peer connection module
 import WebRTC;
 
 module JSApp {
-  alien javascript "js/App.js" {
-    displayWebCam : (String) ~> ();
+  alien javascript "js/app.js" {
+    appendVidToDiv : (String) ~> ();
     toggleCam : (String, String) ~> ();
   }
 }
@@ -172,10 +171,11 @@ sig closeEnough : (Circle, Circle) ~> ()
 fun closeEnough(c1, c2) {
   var distance = sqrt((c2.x -. c1.x)^.2.0 +. (c2.y -. c1.y)^.2.0);
   if (distance <= 150.0) {
-    JSApp.toggleCam(c1.id, "show");
+    WebRTC.connectToUser(c1.id);
+    WebRTC.shareStreamWithPeer(c1.id);
     ()
   } else {
-    JSApp.toggleCam(c1.id, "hide");
+    WebRTC.disconnectFromUser(c1.id);
     ()
   }
 }
@@ -328,10 +328,12 @@ fun enterNameView(str) {
 }
 
 fun enterImageView() {
+  JSApp.appendVidToDiv("local");
   div (class ("canvas2"),
     div (class ("joinBox"),
       ch([
         h1 (id ("welcomeText"), textNode("Take a nice picture of yourself:")),
+        div (class ("localVideoDiv"), he),
         input (
           ca([
             type ("submit"),
@@ -364,7 +366,6 @@ fun view(room) {
   } else if (room.state == "enterName") {
     enterNameView(room.nameField)
   } else {
-    JSApp.displayWebCam(WebRTC.getUUID());
     enterImageView()
   }
 }
@@ -403,16 +404,21 @@ fun clientLoop(msgs, pids) {
 
 #begins webRTC connection and registers client with server
 fun clientRegister() {
-  WebRTC.beginConnection();
+  WebRTC.registerUser();
   serverPid ! Register(self());
   clientLoop([], [])
 }
 
+fun runMVU(clientPid) {
+  WebRTC.waitForWebcam();
+  Mvu.run("placeholder", defaultRoom(clientPid), view, updt,
+      subscriptions, MvuCommands.spawnProc(fun () { retrieveServerMessage(clientPid) }));
+  ()
+}
+
 fun mainPage(serverPid) {
   var clientPid = spawnClient { clientRegister() };
-  Mvu.run("placeholder", defaultRoom(clientPid), view,
-      updt,
-      subscriptions, MvuCommands.spawnProc(fun () { retrieveServerMessage(clientPid) }));
+  var mvuClient = spawnClient { runMVU(clientPid) };
   page
   <html>
     <head>
@@ -422,7 +428,7 @@ fun mainPage(serverPid) {
     <body>
       <div id="placeholder"></div>
       <div id="localVid"></div>
-      <div id="otherVideos"></div>
+      <div id="videos"></div>
     </body>
   </html>
 }
