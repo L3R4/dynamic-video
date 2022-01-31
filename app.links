@@ -12,7 +12,6 @@ module JSApp {
     removePeerVideoDiv : (String) ~> ();
     takePicture : () ~> ();
     getPictureURL : () ~> String;
-    updateIconPosition : (String, String) ~> ();
     displayIcon : (String, String, String, String) ~> ();
   }
 }
@@ -305,7 +304,8 @@ fun drawChar(c) {
   var y = c.y;
   var name = c.name;
   div (class ("character") +@
-       style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;"),
+       style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;" ^^
+       "background-image: url(" ^^ c.imageURL ^^ ");background-position: center;"),
        p (class("charName"), textNode(name))
   )
 }
@@ -318,7 +318,7 @@ fun listOfHTMLChars(cs) {
     case charData::xs ->
       var x = floatToString(charData.x);
       var y = floatToString(charData.y);
-      JSApp.displayIcon(charData.id, charData.imageURL, x, y);
+      #JSApp.displayIcon(charData.id, charData.imageURL, x, y);
       drawChar(charData) :: listOfHTMLChars(xs)
   }
 }
@@ -369,7 +369,7 @@ fun joinedView(room) {
   domSetAttributeFromRef(elem, "style", "position: absolute; left: 1000px; top: 500px;");
   var x = floatToString(room.charData.x);
   var y = floatToString(room.charData.y);
-  JSApp.displayIcon(room.charData.id, room.charData.imageURL, x, y);
+  #JSApp.displayIcon(room.charData.id, room.charData.imageURL, x, y);
   div (id ("canvas"), ch([
     drawChar(room.charData),
     ch(listOfHTMLChars(room.others))

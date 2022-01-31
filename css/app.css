@@ -7,10 +7,18 @@ body {
 }
 
 .character {
-  width: 30px;
-  height: 30px;
+  width: 70px;
+  height: 70px;
   border-radius: 50%;
   background-color: black;
+}
+
+.charName {
+  top: 70px;
+  left: 20px;
+  position: absolute;
+  font-family: verdana;
+  color: rgb(0,0,0);
 }
 
 #canvas {
@@ -72,17 +80,15 @@ body {
   font-family: verdana;
 }
 
-.charName {
-  top: 20px;
-  left: -10px;
-  position: absolute;
-  font-family: verdana;
-  color: rgb(0,0,0);
-}
-
 .videoContainer {
   border: 10px;
   border-color: black;
+}
+
+.crop {
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
 }
 
 #pictureTaker {

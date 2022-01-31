@@ -54,29 +54,20 @@ function _getPictureURL() {
   return imgURL;
 }
 
-function _updateIconPosition(x, y) {
-  if (!document.getElementById('localIcon')) {
-    let icon = document.createElement('img');
-    icon.setAttribute('id', 'localIcon');
-    icon.setAttribute('style', 'left: ' + x + 'px;top: ' + y + 'px;position: absolute;');
-    icon.src = imgURL;
-    document.body.appendChild(icon);
-  } else {
-    let icon = document.getElementById('localIcon');
-    icon.setAttribute('style', 'left: ' + x + 'px;top: ' + y + 'px;position: absolute;');
-  }
-}
-
 function _displayIcon(uuid, imageURL, x, y) {
-  if (!document.getElementById('iconImg' + uuid)) {
+  if (!document.getElementById('iconDiv' + uuid)) {
     let icon = document.createElement('img');
     icon.setAttribute('id', 'iconImg' + uuid);
-    icon.setAttribute('style', 'left: ' + x + 'px;top: ' + y + 'px;position: absolute;');
+    let iconDiv = document.createElement('div');
+    iconDiv.setAttribute('id', 'iconDiv' + uuid);
+    iconDiv.setAttribute('class', 'crop');
+    iconDiv.setAttribute('style', 'left: ' + x + 'px;top: ' + y + 'px;position: absolute;width: 150px; height: 150px; border-radius: 50%;');
     icon.src = imageURL;
-    document.body.appendChild(icon);
+    iconDiv.appendChild(icon);
+    document.body.appendChild(iconDiv);
   } else {
-    let icon = document.getElementById('iconImg' + uuid);
-    icon.setAttribute('style', 'left: ' + x + 'px;top: ' + y + 'px;position: absolute;');
+    let iconDiv = document.getElementById('iconDiv' + uuid);
+    iconDiv.setAttribute('style', 'left: ' + x + 'px;top: ' + y + 'px;position: absolute;width: 150px; height: 150px; border-radius: 50%;');
   }
 }
 
@@ -84,5 +75,4 @@ let appendVidToDiv = LINKS.kify(_appendVidToDiv);
 let removePeerVideoDiv = LINKS.kify(_removePeerVideoDiv);
 let takePicture = LINKS.kify(_takePicture);
 let getPictureURL = LINKS.kify(_getPictureURL);
-let updateIconPosition = LINKS.kify(_updateIconPosition);
 let displayIcon = LINKS.kify(_displayIcon);

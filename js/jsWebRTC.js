@@ -13,7 +13,7 @@ let localStream;
 
 const constraints = {
     video: {
-      width: {max: 200},
+      width: {max: 150},
       height: {max: 150},
       frameRate: {max: 60},
     },
@@ -116,6 +116,7 @@ function gotRemoteStream(event, peerUuid) {
 }
 
 function checkPeerStateChange(event, peerUuid) {
+  if (!peerConnections[peerUuid]) return;
   let state = peerConnections[peerUuid].pc.iceConnectionState;
   console.log(`connection with peer, ${peerUuid} ${state}`);
   if (state == "failed" || state == "closed" || state == "disconnected") {
