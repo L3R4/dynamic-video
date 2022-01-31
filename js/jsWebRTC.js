@@ -20,19 +20,16 @@ const constraints = {
     audio: true,
   };
 
-function _webcamLoaded() {
-  if (localStreamLoaded == true) {
-    return "true";
-  } else {
-    return "false";
-  }
+function _checkIfWebcamLoaded() {
+  return localStreamLoaded;
 }
 
-function _readyWebcam() {
+function _getWebcamReady() {
   let vidElement = document.createElement('video');
   vidElement.setAttribute('id', 'localVideoTemp');
   vidElement.setAttribute('autoplay', 'true');
   vidElement.setAttribute('hidden', 'true');
+  vidElement.muted = true;
   document.body.appendChild(vidElement);
   navigator.mediaDevices.getUserMedia(constraints).then(stream => {
     localStream = stream;
@@ -41,10 +38,9 @@ function _readyWebcam() {
   }).catch(error => {
     console.error('Error opening video camera.', error);
   });
-  console.log("done");
 }
 
-function _setUpPeer(peerUuid) {
+function _setUpPC(peerUuid) {
   peerConnections[peerUuid] = {'pc': new RTCPeerConnection(peerConnectionConfig),
                               'iceCandidates': [],
                               'localDescSet': false,
@@ -61,28 +57,26 @@ function _setUpPeer(peerUuid) {
   peerConnections[peerUuid].pc.oniceconnectionstatechange = event => {
     checkPeerStateChange(event, peerUuid);
   }
+  peerConnections[peerUuid].pc.addStream(localStream);
 }
 
-function _addStreamToConnectionWithPeer(peerUuid) {
-  if (peerConnections[peerUuid].streamAdded == false) {
-    peerConnections[peerUuid].pc.addStream(localStream);
-    peerConnections[peerUuid].streamAdded = true;
-  }
-}
-
-function _connectionInitiated(peerUuid) {
+function _connectionInitiatedWithPeer(peerUuid) {
   if (peerConnections[peerUuid]) {
-    return "true";
+    return true;
   } else {
-    return "false";
+    return false;
   }
 }
 
-function _makeOffer(peerUuid) {
-  peerConnections[peerUuid].pc.createOffer().then(description => createdDescription(description, peerUuid));
+function _setLocalDescForPC(peerUuid, sdpType) {
+  if (sdpType == "offer") {
+    peerConnections[peerUuid].pc.createOffer().then(description => createdDescription(description, peerUuid));
+  } else {
+    peerConnections[peerUuid].pc.createAnswer().then(description => createdDescription(description, peerUuid));
+  }
 }
 
-function _makeAnswer(peerUuid) {
+function _makeAnswerForPeer(peerUuid) {
   peerConnections[peerUuid].pc.createAnswer().then(description => createdDescription(description, peerUuid));
 }
 
@@ -92,65 +86,55 @@ function createdDescription(description, peerUuid) {
   });
 }
 
-function _offerCompleted(peerUuid) {
-  if (peerConnections[peerUuid].localDescSet == true) {
-    return JSON.stringify({'sdp': peerConnections[peerUuid].pc.localDescription});
-  } else {
-    return "Not finished";
-  }
+function _checkIfLocalDescSetForPC(peerUuid) {
+  return peerConnections[peerUuid].localDescSet;
 }
 
-function _receivedDescription(peerUuid, desc) {
+function _getLocalDescForPC(peerUuid) {
+  return JSON.stringify({'sdp': peerConnections[peerUuid].pc.localDescription});
+}
+
+function _setRemoteDescForPC(peerUuid, desc) {
   let sdpObj = JSON.parse(desc);
   peerConnections[peerUuid].pc.setRemoteDescription(new RTCSessionDescription(sdpObj.sdp)).then(function() {
     peerConnections[peerUuid].remoteDescSet = true;
   });
 }
 
-function _remoteDescriptionSet(peerUuid) {
-  if (peerConnections[peerUuid].remoteDescSet == true) {
-    console.log("finished");
-    return "Finished";
-  } else {
-    return "Not finished";
-  }
+function _checkIfRemoteDescSetForPC(peerUuid) {
+  return peerConnections[peerUuid].remoteDescSet;
 }
 
 function gotRemoteStream(event, peerUuid) {
   console.log(`got remote stream, peer ${peerUuid}`);
-
-  if (!document.getElementById('remoteVideo_' + peerUuid)) {
+  if (!document.getElementById('remoteVideoTemp_' + peerUuid)) {
     let vidElement = document.createElement('video');
-    vidElement.setAttribute('id', 'remoteVideo_' + peerUuid);
+    vidElement.setAttribute('id', 'remoteVideoTemp_' + peerUuid);
+    document.body.appendChild(vidElement);
     vidElement.srcObject = event.streams[0];
-/*
-    let vidContainer = document.createElement('div');
-    vidContainer.appendChild(vidElement);
-    vidContainer.setAttribute('id', 'remoteVideo_' + peerUuid);
-    vidContainer.setAttribute('class', 'videoContainer');
-    vidContainer.style.display = "block";
-    */
-
-    //document.getElementById('otherVideos').appendChild(vidContainer);
   }
 }
 
 function checkPeerStateChange(event, peerUuid) {
   let state = peerConnections[peerUuid].pc.iceConnectionState;
   console.log(`connection with peer, ${peerUuid} ${state}`);
-  if (state === "failed" || state === "closed" || state === "disconnected") {
+  if (state == "failed" || state == "closed" || state == "disconnected") {
     delete peerConnections[peerUuid];
-    document.getElementById('otherVideos').removeChild(document.getElementById('remoteVideo_' + peerUuid));
   }
+}
+
+function _checkIfConnectedToPeer(peerUuid) {
+  if (peerConnections[peerUuid]) {
+    let state = peerConnections[peerUuid].pc.iceConnectionState;
+    if (state == "connected") return true;
+  }
+  return false;
 }
 
 function _disconnectFromUser(peerUuid) {
   if (peerConnections[peerUuid]) {
     console.log(`disconnecting from peer, ${peerUuid}`);
     delete peerConnections[peerUuid];
-    if (document.getElementById('remoteVideo_' + peerUuid)) {
-      document.getElementById('otherVideos').removeChild(document.getElementById('remoteVideo_' + peerUuid));
-    }
   }
 }
 
@@ -171,13 +155,13 @@ function _collectCandidates() {
   return "No candidates";
 }
 
-function _addCandidates(candidates, peerId) {
+function _addCandidates(candidates, peerUuid) {
   let iceCandidates = JSON.parse(candidates);
   for (const uuid in iceCandidates) {
     if (uuid == localUuid) {
       let iceList = iceCandidates[uuid];
       for (let i = 0; i < iceList.length; i++) {
-        peerConnections[peerId].pc.addIceCandidate(new RTCIceCandidate(iceList[i]));
+        peerConnections[peerUuid].pc.addIceCandidate(new RTCIceCandidate(iceList[i]));
       }
     }
   }
@@ -195,18 +179,18 @@ function _getLocalUuid() {
   return localUuid;
 }
 
-let webcamLoaded = LINKS.kify(_webcamLoaded);
-let readyWebcam = LINKS.kify(_readyWebcam);
+let checkIfWebcamLoaded = LINKS.kify(_checkIfWebcamLoaded);
+let getWebcamReady = LINKS.kify(_getWebcamReady);
 let setLocalUuid = LINKS.kify(_setLocalUuid);
 let getLocalUuid = LINKS.kify(_getLocalUuid);
-let setUpPeer = LINKS.kify(_setUpPeer);
-let addStreamToConnectionWithPeer = LINKS.kify(_addStreamToConnectionWithPeer);
-let connectionInitiated = LINKS.kify(_connectionInitiated);
-let makeOffer = LINKS.kify(_makeOffer);
-let makeAnswer = LINKS.kify(_makeAnswer);
-let offerCompleted = LINKS.kify(_offerCompleted);
-let receivedDescription = LINKS.kify(_receivedDescription);
-let remoteDescriptionSet = LINKS.kify(_remoteDescriptionSet);
+let setUpPC = LINKS.kify(_setUpPC);
+let connectionInitiatedWithPeer = LINKS.kify(_connectionInitiatedWithPeer);
+let setLocalDescForPC = LINKS.kify(_setLocalDescForPC);
+let checkIfLocalDescSetForPC = LINKS.kify(_checkIfLocalDescSetForPC);
+let getLocalDescForPC = LINKS.kify(_getLocalDescForPC);
+let setRemoteDescForPC = LINKS.kify(_setRemoteDescForPC);
+let checkIfRemoteDescSetForPC = LINKS.kify(_checkIfRemoteDescSetForPC);
+let checkIfConnectedToPeer = LINKS.kify(_checkIfConnectedToPeer);
 let disconnectFromUser = LINKS.kify(_disconnectFromUser);
 let collectCandidates = LINKS.kify(_collectCandidates);
 let addCandidates = LINKS.kify(_addCandidates);

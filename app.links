@@ -9,7 +9,11 @@ import WebRTC;
 module JSApp {
   alien javascript "js/app.js" {
     appendVidToDiv : (String) ~> ();
-    toggleCam : (String, String) ~> ();
+    removePeerVideoDiv : (String) ~> ();
+    takePicture : () ~> ();
+    getPictureURL : () ~> String;
+    updateIconPosition : (String, String) ~> ();
+    displayIcon : (String, String, String, String) ~> ();
   }
 }
 
@@ -37,22 +41,21 @@ fun serverLoop(clients) server {
 
 var serverPid = spawn { serverLoop([]) };
 
-#different ways the circle can move
-typename CircleState = [| Up | Down | Left | Right | Still |];
+#different ways the character can move
+typename CharacterState = [| Up | Down | Left | Right | Still |];
 
-#datetype for circle
-typename Circle =
+#datetype for character
+typename CharacterData =
   (id: String, name: String, x : Float, y: Float, vx : Float, vy : Float,
-  directionV : CircleState, directionH : CircleState);
+  directionV : CharacterState, directionH : CharacterState, imageURL : String);
 
-#circle is only type of server message
-typename ServerMessage = Circle;
+typename ServerMessage = CharacterData;
 
 #messages that the updt function receives
 typename Msg =
   [| NewFrame
-   | MoveCircleV : CircleState
-   | MoveCircleH : CircleState
+   | MoveCharV : CharacterState
+   | MoveCharH : CharacterState
    | UpdateNameField : String
    | NameEntered
    | Joined
@@ -65,17 +68,17 @@ typename RequestMsg =
 
 #this is the model for MVU
 typename Room =
-  (circle : Circle, state : String, nameField : String, others : [Circle], pid:Process({hear:RequestMsg}));
+  (charData : CharacterData, state : String, nameField : String, others : [CharacterData], pid:Process({hear:RequestMsg}));
 
 #parameters
 var halfWidth = 560.0;
 var halfHeight = 315.0;
-var circleVelocity = 5.0;
+var charVelocity = 5.0;
 
 #default room to start with
 fun defaultRoom(clientPid) {
-  (circle = (id = "None", name = "None", x = halfWidth, y = halfHeight, vx = circleVelocity, vy = circleVelocity,
-  directionV = Still, directionH = Still), state = "enterName", nameField = "", others = [], pid = clientPid)
+  (charData = (id = "None", name = "None", x = halfWidth, y = halfHeight, vx = charVelocity, vy = charVelocity,
+  directionV = Still, directionH = Still, imageURL = "None"), state = "enterName", nameField = "", others = [], pid = clientPid)
 }
 
 #runs every frame
@@ -96,13 +99,13 @@ fun keyDownHandler() {
   onKeyDown(fun(evt) {
     var keycode = evt.key;
     if (keycode == upKey) {
-      MoveCircleV(Up)
+      MoveCharV(Up)
     } else if (keycode == downKey) {
-      MoveCircleV(Down)
+      MoveCharV(Down)
     } else if (keycode == leftKey) {
-      MoveCircleH(Left)
+      MoveCharH(Left)
     } else if (keycode == rightKey) {
-      MoveCircleH(Right)
+      MoveCharH(Right)
     } else {
       NoOp
     }
@@ -116,9 +119,9 @@ fun keyUpHandler() {
   onKeyUp(fun(evt) {
     var keycode = evt.key;
     if (keycode == upKey || keycode == downKey) {
-      MoveCircleV(Still)
+      MoveCharV(Still)
     } else if (keycode == leftKey || keycode == rightKey){
-      MoveCircleH(Still)
+      MoveCharH(Still)
     } else {
       NoOp
     }
@@ -130,53 +133,65 @@ fun updateFieldHandler() {
   onInput(fun(str) { UpdateNameField(str) })
 }
 
-#when user presses enter, their name is passed into their circle and joins room
+#when user presses enter, their name is passed into their character data and joins room
 fun enterHandler() {
   onEnter(fun() { NameEntered })
 }
 
 fun clickHandler() {
-  onClick(fun() { Joined })
+  onClick(fun() {
+    JSApp.takePicture();
+    Joined
+  })
 }
 
-#moves circle in certain direction
-fun moveCircle(circle, direction) {
+#moves character in certain direction
+fun moveChar(charData, direction) {
   if (direction == Up) {
-    (circle with y = circle.y -. circleVelocity)
+    (charData with y = charData.y -. charVelocity)
   } else if (direction == Down) {
-    (circle with y = circle.y +. circleVelocity)
+    (charData with y = charData.y +. charVelocity)
   } else if (direction == Left) {
-    (circle with x = circle.x -. circleVelocity)
+    (charData with x = charData.x -. charVelocity)
   } else if (direction == Right) {
-    (circle with x = circle.x +. circleVelocity)
+    (charData with x = charData.x +. charVelocity)
   } else {
-    circle
+    charData
   }
 }
 
-#removes circle from list of circles
-fun removeCircle(c, cs) {
+#removes charData from list of charDatas
+fun removeChar(c, cs) {
   switch(cs) {
     case [] -> []
     case x::xs ->
       if (x.id == c.id)
-        removeCircle(c, xs)
+        removeChar(c, xs)
       else
-        x :: removeCircle(c, xs)
+        x :: removeChar(c, xs)
   }
 }
 
-#checks if user's circle is close to another's circle, then displays their cam
-sig closeEnough : (Circle, Circle) ~> ()
-fun closeEnough(c1, c2) {
+#checks if user's character is close to another's character, then displays their cam
+sig closeEnough : (CharacterData, CharacterData, Bool) ~> ()
+fun closeEnough(c1, c2, isMover) {
   var distance = sqrt((c2.x -. c1.x)^.2.0 +. (c2.y -. c1.y)^.2.0);
   if (distance <= 150.0) {
-    WebRTC.connectToUser(c1.id);
-    WebRTC.shareStreamWithPeer(c1.id);
-    ()
+    if (isMover) {
+      WebRTC.connectToUser(c1.id);
+      if (WebRTC.checkIfConnectedToPeer(c1.id))
+        JSApp.appendVidToDiv(c1.id)
+      else
+        ()
+    } else {
+      if (WebRTC.checkIfConnectedToPeer(c1.id))
+        JSApp.appendVidToDiv(c1.id)
+      else
+       ()
+    }
   } else {
     WebRTC.disconnectFromUser(c1.id);
-    ()
+    JSApp.removePeerVideoDiv(c1.id)
   }
 }
 
@@ -185,12 +200,12 @@ fun closeToOthers(c, others) {
   switch(others) {
     case [] -> ()
     case x::xs ->
-      closeEnough(x, c);
+      closeEnough(x, c, true);
       closeToOthers(c, xs)
   }
 }
 
-#checks to see if a peer's circle has been updated by retrieving the new circle
+#checks to see if a peer's character has been updated by retrieving the new charData
 sig retrieveServerMessage : (%) {}~> Msg
 fun retrieveServerMessage(pid) {
   spawnWait {
@@ -201,20 +216,18 @@ fun retrieveServerMessage(pid) {
   }
 }
 
-#once the user receives an new/updated circle, it updates the room based on it
-sig processServerMsg : (Circle, Room) ~> Room
-fun processServerMsg(msg, room) {
-    var c = msg;
-    var removeOther = removeCircle(c, room.others);
-    var addNewOther = c :: removeOther;
-    if (c.id <> room.circle.id && room.state == "joined") {
-      closeEnough(c, room.circle);
-      (room with others = addNewOther)
-    } else if (c.id <> room.circle.id && room.state == "joined"){
-      (room with others = addNewOther)
-    } else {
-      room
-    }
+#once the user receives an new/updated charData, it updates the room based on it
+sig processServerMsg : (CharacterData, Room) ~> Room
+fun processServerMsg(charData, room) {
+  var c = charData;
+  var removeOther = removeChar(c, room.others);
+  var addNewOther = c :: removeOther;
+  if (c.id <> room.charData.id && room.state == "joined") {
+    closeEnough(c, room.charData, false);
+    (room with others = addNewOther)
+  } else {
+    room
+  }
 }
 
 #main update function in MVU cycle, runs when message (Msg) is received
@@ -223,30 +236,30 @@ fun updt(msg, room) {
   switch(msg) {
     #every frame, this is the case, updates room based on room
     case NewFrame ->
-      var newCircleV = moveCircle(room.circle, room.circle.directionV);
-      var newCircleH = moveCircle(newCircleV, room.circle.directionH);
-      ((room with circle = newCircleH), MvuCommands.empty)
-    #runs when user presses arrow key up or down, updates user's circle
-    case MoveCircleV(i) ->
+      var newCharV = moveChar(room.charData, room.charData.directionV);
+      var newCharH = moveChar(newCharV, room.charData.directionH);
+      ((room with charData = newCharH), MvuCommands.empty)
+    #runs when user presses arrow key up or down, updates user's charData
+    case MoveCharV(i) ->
       if (room.state == "joined") {
-        var updatedCircle = (room.circle with directionV = i);
-        var newCircleV = moveCircle(updatedCircle, updatedCircle.directionV);
-        var newCircleH = moveCircle(newCircleV, updatedCircle.directionH);
-        closeToOthers(newCircleH, room.others);
-        serverPid ! BcastModelMsg(newCircleH);
-        ((room with circle = newCircleH), MvuCommands.empty)
+        var updatedChar = (room.charData with directionV = i);
+        var newCharV = moveChar(updatedChar, updatedChar.directionV);
+        var newCharH = moveChar(newCharV, updatedChar.directionH);
+        closeToOthers(newCharH, room.others);
+        serverPid ! BcastModelMsg(newCharH);
+        ((room with charData = newCharH), MvuCommands.empty)
       } else {
         (room, MvuCommands.empty)
       }
-    #runs when user presses arrow key left or right, updates user's circle
-    case MoveCircleH(i) ->
+    #runs when user presses arrow key left or right, updates user's charData
+    case MoveCharH(i) ->
       if (room.state == "joined") {
-        var updatedCircle = (room.circle with directionH = i);
-        var newCircleH = moveCircle(updatedCircle, updatedCircle.directionH);
-        var newCircleV = moveCircle(newCircleH, updatedCircle.directionV);
-        closeToOthers(newCircleV, room.others);
-        serverPid ! BcastModelMsg(newCircleV);
-        ((room with circle = newCircleV), MvuCommands.empty)
+        var updatedChar = (room.charData with directionH = i);
+        var newCharH = moveChar(updatedChar, updatedChar.directionH);
+        var newCharV = moveChar(newCharH, updatedChar.directionV);
+        closeToOthers(newCharV, room.others);
+        serverPid ! BcastModelMsg(newCharV);
+        ((room with charData = newCharV), MvuCommands.empty)
       } else {
         (room, MvuCommands.empty)
       }
@@ -258,14 +271,16 @@ fun updt(msg, room) {
       ((room with state = "enterImage"), MvuCommands.empty)
     #runs when user presses enter, and changes state of room to joined
     case Joined ->
-      var c = (room.circle with id = WebRTC.getUUID(), name = room.nameField);
+      JSApp.takePicture();
+      var pictureURL = JSApp.getPictureURL();
+      var c = (room.charData with id = WebRTC.getUUID(), name = room.nameField, imageURL = pictureURL);
       serverPid ! BcastModelMsg(c);
-      ((room with circle = c, state = "joined", nameField = ""), MvuCommands.empty)
+      ((room with charData = c, state = "joined", nameField = ""), MvuCommands.empty)
     case NoOp -> (room, MvuCommands.empty)
-    #runs when the client finds a message (circle) in the client loop process
+    #runs when the client finds a message (charData) in the client loop process
     case ServerMsg(msg) ->
       if (room.state == "joined") {
-        serverPid ! BcastModelMsg(room.circle);
+        serverPid ! BcastModelMsg(room.charData);
         var room = processServerMsg(msg, room);
         var f = fun() { retrieveServerMessage(room.pid) };
         (room, Spawn(f))
@@ -283,31 +298,34 @@ var he = MvuHTML.empty;
 fun ch(xs) { MvuHTML.concat(xs) }
 fun ca(xs) { MvuAttrs.concat(xs) }
 
-#HTML for circle
-sig drawCircle : (Circle) -> HTML(Msg)
-fun drawCircle(c) {
+#HTML for charData
+sig drawChar : (CharacterData) -> HTML(Msg)
+fun drawChar(c) {
   var x = c.x;
   var y = c.y;
   var name = c.name;
-  div (class ("circle") +@
+  div (class ("character") +@
        style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;"),
-       p (class("circleName"), textNode(name))
+       p (class("charName"), textNode(name))
   )
 }
 
-#list of circles in HTML
-sig listOfHTMLCircles : ([Circle]) ~> [HTML(Msg)]
-fun listOfHTMLCircles(cs) {
+#list of charDatas in HTML
+sig listOfHTMLChars : ([CharacterData]) ~> [HTML(Msg)]
+fun listOfHTMLChars(cs) {
   switch(cs) {
     case []         -> []
-    case circle::xs ->
-      drawCircle(circle) :: listOfHTMLCircles(xs)
+    case charData::xs ->
+      var x = floatToString(charData.x);
+      var y = floatToString(charData.y);
+      JSApp.displayIcon(charData.id, charData.imageURL, x, y);
+      drawChar(charData) :: listOfHTMLChars(xs)
   }
 }
 
 #HTML UI for welcome page and name box
 fun enterNameView(str) {
-  div (class ("canvas2"),
+  div (id ("canvas2"),
     div (class ("joinBox"),
       ch([
         h1 (id ("welcomeText"), textNode("Enter your name:")),
@@ -329,13 +347,13 @@ fun enterNameView(str) {
 
 fun enterImageView() {
   JSApp.appendVidToDiv("local");
-  div (class ("canvas2"),
+  div (id ("canvas2"),
     div (class ("joinBox"),
       ch([
         h1 (id ("welcomeText"), textNode("Take a nice picture of yourself:")),
-        div (class ("localVideoDiv"), he),
         input (
           ca([
+            id ("pictureTaker"),
             type ("submit"),
             value ("Use"),
             clickHandler()
@@ -346,23 +364,23 @@ fun enterImageView() {
   )
 }
 
+fun joinedView(room) {
+  var elem = getNodeById("localVideoDiv");
+  domSetAttributeFromRef(elem, "style", "position: absolute; left: 1000px; top: 500px;");
+  var x = floatToString(room.charData.x);
+  var y = floatToString(room.charData.y);
+  JSApp.displayIcon(room.charData.id, room.charData.imageURL, x, y);
+  div (id ("canvas"), ch([
+    drawChar(room.charData),
+    ch(listOfHTMLChars(room.others))
+  ]))
+}
+
 #main view function in MVU cycle, display different HTML bases on state of model
 sig view : (Room) ~> HTML(Msg)
 fun view(room) {
   if (room.state == "joined") {
-    var elem = getNodeById("localVideo");
-    if (isNull(elem) == false) {
-      domSetAttributeFromRef(elem, "style", "display: block");
-      div (class ("canvas"), ch([
-        drawCircle(room.circle),
-        ch(listOfHTMLCircles(room.others))
-      ]))
-    } else {
-      div (class ("canvas"), ch([
-        drawCircle(room.circle),
-        ch(listOfHTMLCircles(room.others))
-      ]))
-    }
+    joinedView(room)
   } else if (room.state == "enterName") {
     enterNameView(room.nameField)
   } else {
@@ -423,11 +441,10 @@ fun mainPage(serverPid) {
   <html>
     <head>
       <title>Room</title>
-      <link rel="stylesheet" href="css/room.css" type="text/css" />
+      <link rel="stylesheet" href="css/app.css" type="text/css" />
     </head>
     <body>
       <div id="placeholder"></div>
-      <div id="localVid"></div>
       <div id="videos"></div>
     </body>
   </html>
