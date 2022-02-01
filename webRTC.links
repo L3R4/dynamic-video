@@ -106,14 +106,14 @@ fun setUpNewPeer(peerUuid, initCall) {
   }
 }
 
-fun dealWithOfferForPC(peerUuid, remoteDesc) {
+fun handleOfferForPC(peerUuid, remoteDesc) {
   JSWebRTC.setRemoteDescForPC(peerUuid, remoteDesc);
   waitUntilRemoteDescSetForPC(peerUuid);
   prepareDescriptionForPC(peerUuid, "answer");
   sendDescriptionForPC(peerUuid, "answer")
 }
 
-fun dealWithMessage(msg) {
+fun handleMessage(msg) {
   var localUuid = JSWebRTC.getLocalUuid();
   var peerUuid = msg.uuid;
   if (peerUuid == localUuid || (msg.dest <> localUuid && msg.dest <> "all")) {
@@ -130,7 +130,7 @@ fun dealWithMessage(msg) {
         }
       case SDP ->
         if (msg.sdptype == "offer") {
-          dealWithOfferForPC(peerUuid, msg.sdp)
+          handleOfferForPC(peerUuid, msg.sdp)
         } else {
           JSWebRTC.setRemoteDescForPC(peerUuid, msg.sdp);
           waitUntilRemoteDescSetForPC(peerUuid)
@@ -158,7 +158,7 @@ fun readyLocalWebcam() {
 fun clientLoop() {
   receive {
     case Message(msg) ->
-      dealWithMessage(msg);
+      handleMessage(msg);
       clientLoop()
   }
 }

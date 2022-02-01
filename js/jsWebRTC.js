@@ -13,7 +13,7 @@ let localStream;
 
 const constraints = {
     video: {
-      width: {max: 150},
+      width: {max: 200},
       height: {max: 150},
       frameRate: {max: 60},
     },
@@ -109,7 +109,7 @@ function gotRemoteStream(event, peerUuid) {
   console.log(`got remote stream, peer ${peerUuid}`);
   if (!document.getElementById('remoteVideoTemp_' + peerUuid)) {
     let vidElement = document.createElement('video');
-    vidElement.setAttribute('id', 'remoteVideoTemp_' + peerUuid);
+    vidElement.setAttribute('id', 'remoteVideo_' + peerUuid + 'Temp');
     document.body.appendChild(vidElement);
     vidElement.srcObject = event.streams[0];
   }
