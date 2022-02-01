@@ -33,7 +33,7 @@ function _moveLocalVideo() {
   let canvas = document.getElementById('canvas');
   if (canvas) {
     let videoDiv = document.getElementById('localVideoDiv');
-    canvas.appendChild(videoDiv);
+    document.body.appendChild(videoDiv);
   }
 }
 

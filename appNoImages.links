@@ -365,7 +365,7 @@ fun enterImageView() {
 
 fun joinedView(room) {
   var elem = getNodeById("localVideoDiv");
-  domSetAttributeFromRef(elem, "style", "position: absolute; left: 800px; top: 430px;");
+  domSetAttributeFromRef(elem, "style", "position: absolute; left: 1100px; top: 550px;");
   var x = floatToString(room.charData.x);
   var y = floatToString(room.charData.y);
   div (id ("canvas"), ch([
