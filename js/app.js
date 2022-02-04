@@ -16,6 +16,7 @@ function appendVidToDiv(id, local) {
   newLocalVid.srcObject = localVid.srcObject;
   if (local) newLocalVid.muted = true;
   divElement.appendChild(newLocalVid);
+  /*
   if (local) {
     let joinBox = document.getElementById('joinBox');
     if (joinBox) {
@@ -27,6 +28,8 @@ function appendVidToDiv(id, local) {
       canvas.appendChild(divElement);
     }
   }
+  */
+  document.body.appendChild(divElement);
 }
 
 function _moveLocalVideo() {
@@ -50,7 +53,7 @@ function _displayLiveStream(id) {
 function _removePeerVideoDiv(peerUuid) {
   let div = document.getElementById('remoteVideo_' + peerUuid + 'Div');
   if (div) {
-    document.getElementById('canvas').removeChild(div);
+    document.body.removeChild(div);
     delete peerUuids[peerUuid];
   }
 }
