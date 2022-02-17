@@ -8,36 +8,60 @@ let peerConnectionConfig = {
 };
 
 let localUuid = "";
-let localStreamLoaded = false;
-let localStream;
+let localVideoTrack;
+let localAudioTrack;
+let localVideoTrackLoaded = false;
+let localAudioTrackLoaded = false;
 
-const constraints = {
+function _checkIfCameraLoaded() {
+  return localVideoTrackLoaded;
+}
+
+function _checkIfMicLoaded() {
+  return localAudioTrackLoaded;
+}
+
+function _getCameraReady(camId) {
+  const constraints = {
     video: {
       width: {max: 200},
       height: {max: 150},
       frameRate: {max: 60},
+      deviceId: camId
     },
-    audio: true,
+    audio: false
   };
-
-function _checkIfWebcamLoaded() {
-  return localStreamLoaded;
+  navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+    localVideoTrack = stream.getVideoTracks()[0];
+    localVideoTrackLoaded = true;
+  }).catch(error => {
+    console.error('Error opening video camera.', error);
+  });
 }
 
-function _getWebcamReady() {
+function _getMicReady(micId) {
+  const constraints = {
+    video: false,
+    audio: {
+      deviceId: micId
+    }
+  };
+  navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+    localAudioTrack = stream.getAudioTracks()[0];
+    localAudioTrackLoaded = true;
+  }).catch(error => {
+    console.error('Error opening audio device', error);
+  });
+}
+
+function _createLocalStreamElement() {
   let vidElement = document.createElement('video');
   vidElement.setAttribute('id', 'localVideoTemp');
   vidElement.setAttribute('autoplay', 'true');
   vidElement.setAttribute('hidden', 'true');
   vidElement.muted = true;
+  vidElement.srcObject = new MediaStream([localVideoTrack, localAudioTrack]);
   document.body.appendChild(vidElement);
-  navigator.mediaDevices.getUserMedia(constraints).then(stream => {
-    localStream = stream;
-    vidElement.srcObject = stream;
-    localStreamLoaded = true;
-  }).catch(error => {
-    console.error('Error opening video camera.', error);
-  });
 }
 
 function _setUpPC(peerUuid) {
@@ -45,19 +69,23 @@ function _setUpPC(peerUuid) {
                               'iceCandidates': [],
                               'localDescSet': false,
                               'remoteDescSet': false,
-                              'streamAdded': false};
+                              'streamAdded': false,
+                              'videoTrack': null,
+                              'audioTrack': null
+                            };
   peerConnections[peerUuid].pc.onicecandidate = event => {
     if (event.candidate != null) {
       peerConnections[peerUuid].iceCandidates.push(event.candidate);
     }
   }
   peerConnections[peerUuid].pc.ontrack = event => {
-    gotRemoteStream(event, peerUuid);
+    gotRemoteTrack(event, peerUuid);
   }
   peerConnections[peerUuid].pc.oniceconnectionstatechange = event => {
     checkPeerStateChange(event, peerUuid);
   }
-  peerConnections[peerUuid].pc.addStream(localStream);
+  peerConnections[peerUuid].pc.addTrack(localVideoTrack);
+  peerConnections[peerUuid].pc.addTrack(localAudioTrack);
 }
 
 function _connectionInitiatedWithPeer(peerUuid) {
@@ -105,13 +133,23 @@ function _checkIfRemoteDescSetForPC(peerUuid) {
   return peerConnections[peerUuid].remoteDescSet;
 }
 
-function gotRemoteStream(event, peerUuid) {
-  console.log(`got remote stream, peer ${peerUuid}`);
+function gotRemoteTrack(event, peerUuid) {
+  console.log(`got remote track, peer ${peerUuid}`);
+  let track = event.track;
   if (!document.getElementById('remoteVideoTemp_' + peerUuid)) {
-    let vidElement = document.createElement('video');
-    vidElement.setAttribute('id', 'remoteVideo_' + peerUuid + 'Temp');
-    document.body.appendChild(vidElement);
-    vidElement.srcObject = event.streams[0];
+    if (track.kind == "video") {
+      peerConnections[peerUuid].videoTrack = track;
+    } else {
+      peerConnections[peerUuid].audioTrack = track;
+    }
+    let videoTrack = peerConnections[peerUuid].videoTrack;
+    let audioTrack = peerConnections[peerUuid].audioTrack;
+    if (videoTrack && audioTrack) {
+      let vidElement = document.createElement('video');
+      vidElement.setAttribute('id', 'remoteVideo_' + peerUuid + 'Temp');
+      vidElement.srcObject = new MediaStream([videoTrack, audioTrack]);
+      document.body.appendChild(vidElement);
+    }
   }
 }
 
@@ -180,8 +218,11 @@ function _getLocalUuid() {
   return localUuid;
 }
 
-let checkIfWebcamLoaded = LINKS.kify(_checkIfWebcamLoaded);
-let getWebcamReady = LINKS.kify(_getWebcamReady);
+let checkIfCameraLoaded = LINKS.kify(_checkIfCameraLoaded);
+let checkIfMicLoaded = LINKS.kify(_checkIfMicLoaded);
+let getCameraReady = LINKS.kify(_getCameraReady);
+let getMicReady = LINKS.kify(_getMicReady);
+let createLocalStreamElement = LINKS.kify(_createLocalStreamElement);
 let setLocalUuid = LINKS.kify(_setLocalUuid);
 let getLocalUuid = LINKS.kify(_getLocalUuid);
 let setUpPC = LINKS.kify(_setUpPC);

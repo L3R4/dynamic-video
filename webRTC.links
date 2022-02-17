@@ -8,8 +8,11 @@ typename PCMessage = (uuid : Uuid, dest : String, type : MessageType, sdp : Stri
 
 module JSWebRTC {
     alien javascript "js/jsWebRTC.js" {
-        checkIfWebcamLoaded : () ~> Bool;
-        getWebcamReady : () ~> ();
+        checkIfCameraLoaded : () ~> Bool;
+        checkIfMicLoaded : () ~> Bool;
+        getCameraReady : (String) ~> ();
+        getMicReady : (String) ~> ();
+        createLocalStreamElement : () ~> ();
         setLocalUuid : () ~> ();
         getLocalUuid : () ~> Uuid;
         setUpPC : (Uuid) ~> ();
@@ -141,17 +144,28 @@ fun handleMessage(msg) {
   }
 }
 
-fun waitForWebcam() {
-  var bool = JSWebRTC.checkIfWebcamLoaded();
+fun waitForCamera() {
+  var bool = JSWebRTC.checkIfCameraLoaded();
   if (bool)
     ()
   else
-    waitForWebcam()
+    waitForCamera()
 }
 
-fun readyLocalWebcam() {
-  JSWebRTC.getWebcamReady();
-  waitForWebcam()
+fun waitForMic() {
+  var bool = JSWebRTC.checkIfMicLoaded();
+  if (bool)
+    ()
+  else
+    waitForMic()
+}
+
+fun readyMediaDevices(camId, micId) {
+  JSWebRTC.getCameraReady(camId);
+  waitForCamera();
+  JSWebRTC.getMicReady(micId);
+  waitForMic();
+  JSWebRTC.createLocalStreamElement()
 }
 
 # Loop thread run on the client, listens for messages from the server
@@ -165,7 +179,8 @@ fun clientLoop() {
 
 fun clientRegister() {
   JSWebRTC.setLocalUuid();
-  readyLocalWebcam();
+  waitForCamera();
+  waitForMic();
   serverPid ! Register(self());
   clientLoop()
 }

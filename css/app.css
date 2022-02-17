@@ -22,50 +22,72 @@ body {
 }
 
 #canvas {
-  border: 5px solid #000;
-  width: 1000px;
-  height: 600px;
   background-color: rgb(210,210,210);
-  left: 300px;
-  top: 100px;
-  position: relative;
+  width: 1200px;
+  height: 700px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 5px solid #000;
 }
 
 #joinBox {
+  width: 800px;
+  height: 400px;
+  position: relative;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   border: 4px;
   border-style: solid;
   border-color: #000;
-  width: 800px;
-  height: 400px;
-  left: 100px;
-  top: 100px;
-  position: relative;
 }
 
 #welcomeText {
-  left: 75px;
-  top: 50px;
   position: absolute;
+  left: 50%;
+  top: 50px;
+  transform: translate(-50%, 0);
   font-family: verdana;
 }
 
 #nameBox {
+  position: absolute;
+  left: 50%;
+  top: 120px;
+  transform: translate(-50%, 0);
   border: 3px;
   border-style: solid;
   border-color: #000;
-  width: 250px;
-  left: 100px;
-  top: 200px;
-  position: absolute;
 }
 
 #pictureTaker {
   width: 70px;
   height: 70px;
-  left: 500px;
-  top: 200px;
   position: absolute;
+  left: 70%;
+  top: 60%;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
+}
+
+#selectCamera {
+  position: absolute;
+  left: 30%;
+  top: 50%;
+}
+
+#selectMic {
+  position: absolute;
+  left: 60%;
+  top: 50%;
+}
+
+#mediaSubmitButton {
+  position: absolute;
+  left: 50%;
+  top: 70%;
 }
 
 .videoContainer {
@@ -78,8 +100,24 @@ body {
   border-radius: 25%;
 }
 
-#localVideoDiv {
-  left: 500px;
-  top: 300px;
+.cameraMode {
   position: absolute;
+  left: 48%;
+  top: 55%;
+  transform: translate(-50%, -50%)
 }
+
+.webcamMode {
+  position: absolute;
+  left: 80%;
+  top: 80%;
+  transform: translate(-50%, -50%)
+}
+/*
+#localVideoDiv {
+  position: absolute;
+  left: 48%;
+  top: 55%;
+  transform: translate(-50%, -50%)
+}
+*/
