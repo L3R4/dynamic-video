@@ -243,17 +243,6 @@ fun closeToOthers(c, others) {
   }
 }
 
-#checks to see if a peer's character has been updated by retrieving the new charData
-sig retrieveServerMessage : (%) {}~> Msg
-fun retrieveServerMessage(pid) {
-  spawnWait {
-    pid ! RetrieveMsg(self());
-    receive {
-        case msg -> ServerMsg(msg)
-    }
-  }
-}
-
 #once the user receives an new/updated charData, it updates the room based on it
 sig processServerMsg : (ServerMessage, Room) ~> Room
 fun processServerMsg(serverMsg, room) {
@@ -512,20 +501,6 @@ fun view(room) {
 sig subscriptions : (Room) -> Sub(Msg)
 fun subscriptions(model) {
   animFrameHandler() +^ keyUpHandler() +^ keyDownHandler()
-}
-
-#sends every message to every process
-fun drain(msgs, pids) {
-    switch (msgs) {
-        case [] -> (msgs, pids)
-        case msg :: msgs ->
-            switch (pids) {
-                case [] -> (msgs, pids)
-                case pid :: pids ->
-                    pid ! msg;
-                    (msgs, pids)
-            }
-    }
 }
 
 #invariant, at least one of msgs, pids is empty.
