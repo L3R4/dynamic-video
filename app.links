@@ -70,15 +70,12 @@ typename Msg =
    | ServerMsg:ServerMessage
   |];
 
-typename RequestMsg =
-  [| Position:ServerMessage | Icon:ServerMessage | RetrieveMsg:Process({hear:ServerMessage}) |];
-
 #datetype for character
 typename CharacterData = (id: String, name: String, x : Float, y: Float, imageURL : String);
 
 #this is the model for MVU
 typename Room =
-  (charData : CharacterData, directionV : CharacterState, directionH : CharacterState, state : String, nameField : String, cameraId : String, micId : String, others : [CharacterData], pid:Process({hear:RequestMsg}));
+  (charData : CharacterData, directionV : CharacterState, directionH : CharacterState, state : String, nameField : String, cameraId : String, micId : String, others : [CharacterData]);
 
 #parameters
 var halfWidth = 560.0;
@@ -88,7 +85,7 @@ var charVelocity = 5.0;
 #default room to start with
 fun defaultRoom(clientPid) {
   (charData = (id = "None", name = "None", x = halfWidth, y = halfHeight, imageURL = "None"),
-  directionV = Still, directionH = Still, state = "enterName", nameField = "", cameraId = "None", micId = "None", others = [], pid = clientPid)
+  directionV = Still, directionH = Still, state = "enterName", nameField = "", cameraId = "None", micId = "None", others = [])
 }
 
 #runs every frame
@@ -345,12 +342,10 @@ fun updt(msg, room) {
         var charPos = CharacterPosition(id = cData.id, x = cData.x, y = cData.y);
         serverPid ! BroadcastPosition(charPos);
         var room = processServerMsg(msg, room);
-        var f = fun() { retrieveServerMessage(room.pid) };
-        (room, Spawn(f))
+        (room, MvuCommands.empty)
       } else {
         var room = processServerMsg(msg, room);
-        var f = fun() { retrieveServerMessage(room.pid) };
-        (room, Spawn(f))
+        (room, MvuCommands.empty)
       }
   }
 }
@@ -534,17 +529,14 @@ fun drain(msgs, pids) {
 }
 
 #invariant, at least one of msgs, pids is empty.
-fun clientLoop(msgs, pids) {
+fun clientLoop(msgs, pids, hndl) {
     receive {
       case Position(msg) ->
-        var (msgs, pids) = drain(msgs ++ [msg], pids);
-        clientLoop(msgs, pids)
+        Mvu.dispatch(ServerMsg(msg), hndl);
+        clientLoop(msgs, pids, hndl)
       case Icon(msg) ->
-        var (msgs, pids) = drain(msgs ++ [msg], pids);
-        clientLoop(msgs, pids)
-      case RetrieveMsg(pid) ->
-        var (msgs, pids) = drain(msgs, pids ++ [pid]);
-        clientLoop(msgs, pids)
+        Mvu.dispatch(ServerMsg(msg), hndl);
+        clientLoop(msgs, pids, hndl)
     }
 }
 
@@ -561,21 +553,14 @@ fun clientRegister() {
   JSApp.gatherMediaDeviceIds("videoinput");
   JSApp.gatherMediaDeviceIds("audioinput");
   waitForDeviceIds();
-  #WebRTC.registerUser();
+  var hndl = Mvu.runHandle("placeholder", defaultRoom(self()), view, updt,
+  subscriptions, MvuCommands.empty);
   serverPid ! Register(self());
-  clientLoop([], [])
-}
-
-fun runMVU(clientPid) {
-  #WebRTC.waitForWebcam();
-  Mvu.run("placeholder", defaultRoom(clientPid), view, updt,
-      subscriptions, MvuCommands.spawnProc(fun () { retrieveServerMessage(clientPid) }));
-  ()
+  clientLoop([], [], hndl)
 }
 
 fun mainPage(serverPid) {
   var clientPid = spawnClient { clientRegister() };
-  var mvuClient = spawnClient { runMVU(clientPid) };
   page
   <html>
     <head>
