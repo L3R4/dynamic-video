@@ -2,16 +2,23 @@ typename Uuid = String;
 typename Desc = String;
 typename Candidates = String;
 typename OfferOrAnswer = String;
+typename DeviceType = String;
+typename DeviceID = String;
+typename DeviceLabel = String;
 typename MessageType = [| ConnectionRequest | SDP | Ice |];
 typename PCMessage = (uuid : Uuid, dest : String, type : MessageType, sdp : String,
                       sdptype : OfferOrAnswer, iceCandidates : Candidates);
 
 module JSWebRTC {
     alien javascript "js/jsWebRTC.js" {
+        gatherMediaDeviceIds : (DeviceType) ~> ();
+        checkDevicesGathered : (DeviceType) ~> Bool;
+        getMediaDeviceIds : (DeviceType) ~> [DeviceID];
+        getMediaDeviceLabels : (DeviceType) ~> [DeviceLabel];
         checkIfCameraLoaded : () ~> Bool;
         checkIfMicLoaded : () ~> Bool;
-        getCameraReady : (String) ~> ();
-        getMicReady : (String) ~> ();
+        getCameraReady : (DeviceID) ~> ();
+        getMicReady : (DeviceID) ~> ();
         createLocalStreamElement : () ~> ();
         setLocalUuid : () ~> ();
         getLocalUuid : () ~> Uuid;
@@ -53,18 +60,13 @@ fun serverLoop(clients) server {
 
 var serverPid = spawn { serverLoop([]) };
 
-fun broadcastMessageToPeers(message) {
-  serverPid ! Broadcast(message);
-  ()
-}
-
 fun handleIceCandidates() {
   sleep(500);
   var candidates = JSWebRTC.collectCandidates();
   if (candidates <> "No candidates") {
     var localUuid = JSWebRTC.getLocalUuid();
     var message = (uuid=localUuid, dest="all", type=Ice, sdp="_", sdptype="_", iceCandidates=candidates);
-    broadcastMessageToPeers(message);
+    serverPid ! Broadcast(message);
     handleIceCandidates()
   } else {
     handleIceCandidates()
@@ -91,7 +93,8 @@ fun sendDescriptionForPC(peerUuid, sdpType) {
   var desc = JSWebRTC.getLocalDescForPC(peerUuid);
   var localUuid = JSWebRTC.getLocalUuid();
   var message = (uuid=localUuid, dest=peerUuid, type=SDP, sdp=desc, sdptype=sdpType, iceCandidates="_");
-  broadcastMessageToPeers(message)
+  serverPid ! Broadcast(message);
+  ()
 }
 
 fun prepareDescriptionForPC(peerUuid, sdpType) {
@@ -99,9 +102,9 @@ fun prepareDescriptionForPC(peerUuid, sdpType) {
   waitUntilLocalDescSetForPC(peerUuid)
 }
 
-fun setUpNewPeer(peerUuid, initCall) {
+fun setUpNewPeer(peerUuid, sendOffer) {
   JSWebRTC.setUpPC(peerUuid);
-  if (initCall) {
+  if (sendOffer) {
     prepareDescriptionForPC(peerUuid, "offer");
     sendDescriptionForPC(peerUuid, "offer")
   } else {
@@ -116,15 +119,20 @@ fun handleOfferForPC(peerUuid, remoteDesc) {
   sendDescriptionForPC(peerUuid, "answer")
 }
 
+fun checkIfConnectedToPeer(peerUuid) {
+  JSWebRTC.checkIfConnectedToPeer(peerUuid)
+}
+
 fun handleMessage(msg) {
   var localUuid = JSWebRTC.getLocalUuid();
   var peerUuid = msg.uuid;
+  var destUuid = msg.dest;
   if (peerUuid == localUuid || (msg.dest <> localUuid && msg.dest <> "all")) {
     ()
   } else {
     switch (msg.type) {
       case ConnectionRequest ->
-        if (not(JSWebRTC.connectionInitiatedWithPeer(peerUuid))) {
+        if (not(checkIfConnectedToPeer(peerUuid))) {
           setUpNewPeer(peerUuid, true);
           var iceId2 = spawnClient { handleIceCandidates() };
           ()
@@ -142,6 +150,27 @@ fun handleMessage(msg) {
         JSWebRTC.addCandidates(msg.iceCandidates, peerUuid)
     }
   }
+}
+
+fun waitForDeviceIds(mediatype) {
+  var gathered = JSWebRTC.checkDevicesGathered(mediatype);
+  if (not(gathered))
+    waitForDeviceIds(mediatype)
+  else
+    ()
+}
+
+fun gatherDeviceIds(mediatype) {
+  JSWebRTC.gatherMediaDeviceIds(mediatype);
+  waitForDeviceIds(mediatype)
+}
+
+fun getDeviceIds(mediatype) {
+  JSWebRTC.getMediaDeviceIds(mediatype)
+}
+
+fun getDeviceLabels(mediatype) {
+  JSWebRTC.getMediaDeviceLabels(mediatype)
 }
 
 fun waitForCamera() {
@@ -179,19 +208,18 @@ fun clientLoop() {
 
 fun clientRegister() {
   JSWebRTC.setLocalUuid();
-  waitForCamera();
-  waitForMic();
   serverPid ! Register(self());
   clientLoop()
 }
 
 fun connectToUser(peerUuid) {
-  if (not(JSWebRTC.connectionInitiatedWithPeer(peerUuid))) {
+  if (not(checkIfConnectedToPeer(peerUuid))) {
     setUpNewPeer(peerUuid, false);
     var iceId = spawnClient { handleIceCandidates() };
     var localUuid = JSWebRTC.getLocalUuid();
     var message = (uuid=localUuid, dest=peerUuid, type=ConnectionRequest, sdp="_", sdptype="_", iceCandidates="_");
-    broadcastMessageToPeers(message)
+    serverPid ! Broadcast(message);
+    ()
   } else {
     ()
   }
@@ -199,10 +227,6 @@ fun connectToUser(peerUuid) {
 
 fun disconnectFromUser(peerUuid) {
   JSWebRTC.disconnectFromUser(peerUuid)
-}
-
-fun checkIfConnectedToPeer(peerUuid) {
-  JSWebRTC.checkIfConnectedToPeer(peerUuid)
 }
 
 fun getUUID() {

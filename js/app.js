@@ -1,11 +1,5 @@
 let peerUuids = {};
 let imgURL = "";
-let cameraIds = null;
-let micIds = null;
-let cameraLabels = null;
-let micLabels = null;
-let gotCameraDevices = false;
-let gotMicDevices = false;
 
 function arrangeVideoDivs() {
   let multiplier = 0;
@@ -83,49 +77,11 @@ function _displayIcon(uuid, imageURL, x, y) {
   }
 }
 
-function cons(x, xs) { return {_head: x, _tail: xs}}
-
-function _gatherMediaDeviceIds(type) {
-  let mediaDeviceIds = null;
-  let mediaDeviceLabels = null;
-  navigator.mediaDevices.enumerateDevices().then(function(devices) {
-    devices.forEach(function(device) {
-      if (device.kind == type) {
-        mediaDeviceIds = cons(device.deviceId, mediaDeviceIds);
-        mediaDeviceLabels = cons(device.label, mediaDeviceLabels);
-      }
-    });
-    if (type == "videoinput") {
-      cameraIds = mediaDeviceIds;
-      cameraLabels = mediaDeviceLabels;
-      gotCameraDevices = true;
-    } else {
-      micIds = mediaDeviceIds;
-      micLabels = mediaDeviceLabels;
-      gotMicDevices = true;
-    }
-  })
-}
-
-function _checkDevicesGathered() {
-  return gotCameraDevices && gotMicDevices ? true : false;
-}
-
-function _getDeviceIds(type) {
-  return type == "videoinput" ? cameraIds : micIds;
-}
-
-function _getDeviceLabels(type) {
-  return type == "videoinput" ? cameraLabels : micLabels;
-}
-
 function _getSelectedOptions() {
   let selectElementCam = document.getElementById("selectCamera");
   let selectElementMic = document.getElementById("selectMic");
   let indexCam = selectElementCam.selectedIndex;
   let indexMic = selectElementMic.selectedIndex;
-  console.log(indexCam);
-  console.log(indexMic);
   let camId = selectElementCam.options[indexCam].value;
   let micId = selectElementMic.options[indexMic].value;
   let deviceIds = null;
@@ -143,9 +99,5 @@ let removePeerVideoDiv = LINKS.kify(_removePeerVideoDiv);
 let takePicture = LINKS.kify(_takePicture);
 let getPictureURL = LINKS.kify(_getPictureURL);
 let displayIcon = LINKS.kify(_displayIcon);
-let gatherMediaDeviceIds = LINKS.kify(_gatherMediaDeviceIds);
-let checkDevicesGathered = LINKS.kify(_checkDevicesGathered);
-let getDeviceIds = LINKS.kify(_getDeviceIds);
-let getDeviceLabels = LINKS.kify(_getDeviceLabels);
 let getSelectedOptions = LINKS.kify(_getSelectedOptions);
 let addPeerToList = LINKS.kify(_addPeerToList);

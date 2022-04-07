@@ -49,6 +49,9 @@ fun serverLoop(clients) server {
 
 var serverPid = spawn { serverLoop([]) };
 
+typename DeviceID = String;
+typename Uuid = String;
+
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right | Still |];
 
@@ -64,14 +67,14 @@ typename Msg =
    | MoveCharH : CharacterState
    | UpdateNameField : String
    | NameEntered
-   | MediaChosen : (String, String)
+   | MediaChosen : (DeviceID, DeviceID)
    | Joined
    | NoOp
-   | ServerMsg:ServerMessage
+   | ServerMsg : ServerMessage
   |];
 
 #datetype for character
-typename CharacterData = (id: String, name: String, x : Float, y: Float, imageURL : String);
+typename CharacterData = (id: Uuid, name: String, x : Float, y: Float, imageURL : String);
 
 #this is the model for MVU
 typename Room =
@@ -428,10 +431,10 @@ fun enterNameView(str) {
 }
 
 fun enterMediaView() {
-  var camIds = JSApp.getDeviceIds("videoinput");
-  var camLabels = JSApp.getDeviceLabels("videoinput");
-  var micIds = JSApp.getDeviceIds("audioinput");
-  var micLabels = JSApp.getDeviceLabels("audioinput");
+  var camIds = WebRTC.getDeviceIds("videoinput");
+  var camLabels = WebRTC.getDeviceLabels("videoinput");
+  var micIds = WebRTC.getDeviceIds("audioinput");
+  var micLabels = WebRTC.getDeviceLabels("audioinput");
   div (id ("canvas"),
     div (id ("joinBox"),
       ch([
@@ -515,19 +518,10 @@ fun clientLoop(msgs, pids, hndl) {
     }
 }
 
-fun waitForDeviceIds() {
-  var gathered = JSApp.checkDevicesGathered();
-  if (not(gathered))
-    waitForDeviceIds()
-  else
-    ()
-}
-
 #begins webRTC connection and registers client with server
 fun clientRegister() {
-  JSApp.gatherMediaDeviceIds("videoinput");
-  JSApp.gatherMediaDeviceIds("audioinput");
-  waitForDeviceIds();
+  WebRTC.gatherDeviceIds("videoinput");
+  WebRTC.gatherDeviceIds("audioinput");
   var hndl = Mvu.runHandle("placeholder", defaultRoom(self()), view, updt,
   subscriptions, MvuCommands.empty);
   serverPid ! Register(self());

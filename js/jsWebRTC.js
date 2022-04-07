@@ -12,6 +12,48 @@ let localVideoTrack;
 let localAudioTrack;
 let localVideoTrackLoaded = false;
 let localAudioTrackLoaded = false;
+let cameraIds = null;
+let micIds = null;
+let cameraLabels = null;
+let micLabels = null;
+let gotCameraDevices = false;
+let gotMicDevices = false;
+
+function cons(x, xs) { return {_head: x, _tail: xs}}
+
+function _gatherMediaDeviceIds(type) {
+  let mediaDeviceIds = null;
+  let mediaDeviceLabels = null;
+  navigator.mediaDevices.enumerateDevices().then(function(devices) {
+    devices.forEach(function(device) {
+      if (device.kind == type) {
+        mediaDeviceIds = cons(device.deviceId, mediaDeviceIds);
+        mediaDeviceLabels = cons(device.label, mediaDeviceLabels);
+      }
+    });
+    if (type == "videoinput") {
+      cameraIds = mediaDeviceIds;
+      cameraLabels = mediaDeviceLabels;
+      gotCameraDevices = true;
+    } else {
+      micIds = mediaDeviceIds;
+      micLabels = mediaDeviceLabels;
+      gotMicDevices = true;
+    }
+  })
+}
+
+function _checkDevicesGathered(type) {
+  return type == "videoinput" ? gotCameraDevices : gotMicDevices;
+}
+
+function _getMediaDeviceIds(type) {
+  return type == "videoinput" ? cameraIds : micIds;
+}
+
+function _getMediaDeviceLabels(type) {
+  return type == "videoinput" ? cameraLabels : micLabels;
+}
 
 function _checkIfCameraLoaded() {
   return localVideoTrackLoaded;
@@ -31,7 +73,7 @@ function _getCameraReady(camId) {
     },
     audio: false
   };
-  navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+  navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     localVideoTrack = stream.getVideoTracks()[0];
     localVideoTrackLoaded = true;
   }).catch(error => {
@@ -46,7 +88,7 @@ function _getMicReady(micId) {
       deviceId: micId
     }
   };
-  navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+  navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     localAudioTrack = stream.getAudioTracks()[0];
     localAudioTrackLoaded = true;
   }).catch(error => {
@@ -98,19 +140,25 @@ function _connectionInitiatedWithPeer(peerUuid) {
 
 function _setLocalDescForPC(peerUuid, sdpType) {
   if (sdpType == "offer") {
-    peerConnections[peerUuid].pc.createOffer().then(description => createdDescription(description, peerUuid));
+    peerConnections[peerUuid].pc.createOffer().then(function(description) {
+      peerConnections[peerUuid].pc.setLocalDescription(description).then(() => {
+        peerConnections[peerUuid].localDescSet = true;
+      });
+    });
   } else {
-    peerConnections[peerUuid].pc.createAnswer().then(description => createdDescription(description, peerUuid));
+    peerConnections[peerUuid].pc.createAnswer().then(function(description) {
+      peerConnections[peerUuid].pc.setLocalDescription(description).then(() => {
+        peerConnections[peerUuid].localDescSet = true;
+      });
+    });
   }
 }
 
-function _makeAnswerForPeer(peerUuid) {
-  peerConnections[peerUuid].pc.createAnswer().then(description => createdDescription(description, peerUuid));
-}
-
-function createdDescription(description, peerUuid) {
-  peerConnections[peerUuid].pc.setLocalDescription(description).then(function () {
-    peerConnections[peerUuid].localDescSet = true;
+function _setRemoteDescForPC(peerUuid, desc) {
+  let sdpObj = JSON.parse(desc);
+  let rtcDesc = new RTCSessionDescription(sdpObj.sdp);
+  peerConnections[peerUuid].pc.setRemoteDescription(rtcDesc).then(function() {
+    peerConnections[peerUuid].remoteDescSet = true;
   });
 }
 
@@ -118,23 +166,15 @@ function _checkIfLocalDescSetForPC(peerUuid) {
   return peerConnections[peerUuid].localDescSet;
 }
 
-function _getLocalDescForPC(peerUuid) {
-  return JSON.stringify({'sdp': peerConnections[peerUuid].pc.localDescription});
-}
-
-function _setRemoteDescForPC(peerUuid, desc) {
-  let sdpObj = JSON.parse(desc);
-  peerConnections[peerUuid].pc.setRemoteDescription(new RTCSessionDescription(sdpObj.sdp)).then(function() {
-    peerConnections[peerUuid].remoteDescSet = true;
-  });
-}
-
 function _checkIfRemoteDescSetForPC(peerUuid) {
   return peerConnections[peerUuid].remoteDescSet;
 }
 
+function _getLocalDescForPC(peerUuid) {
+  return JSON.stringify({'sdp': peerConnections[peerUuid].pc.localDescription});
+}
+
 function gotRemoteTrack(event, peerUuid) {
-  console.log(`got remote track, peer ${peerUuid}`);
   let track = event.track;
   if (!document.getElementById('remoteVideoTemp_' + peerUuid)) {
     if (track.kind == "video") {
@@ -200,7 +240,8 @@ function _addCandidates(candidates, peerUuid) {
     if (uuid == localUuid) {
       let iceList = iceCandidates[uuid];
       for (let i = 0; i < iceList.length; i++) {
-        peerConnections[peerUuid].pc.addIceCandidate(new RTCIceCandidate(iceList[i]));
+        let newIce = new RTCIceCandidate(iceList[i]);
+        peerConnections[peerUuid].pc.addIceCandidate(newIce);
       }
     }
   }
@@ -218,6 +259,10 @@ function _getLocalUuid() {
   return localUuid;
 }
 
+let gatherMediaDeviceIds = LINKS.kify(_gatherMediaDeviceIds);
+let checkDevicesGathered = LINKS.kify(_checkDevicesGathered);
+let getMediaDeviceIds = LINKS.kify(_getMediaDeviceIds);
+let getMediaDeviceLabels = LINKS.kify(_getMediaDeviceLabels);
 let checkIfCameraLoaded = LINKS.kify(_checkIfCameraLoaded);
 let checkIfMicLoaded = LINKS.kify(_checkIfMicLoaded);
 let getCameraReady = LINKS.kify(_getCameraReady);

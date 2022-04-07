@@ -74,19 +74,31 @@ body {
 
 #selectCamera {
   position: absolute;
-  left: 30%;
+  left: 10%;
   top: 50%;
+}
+
+#videoInput {
+  position: absolute;
+  left: 18%;
+  top: 40%;
 }
 
 #selectMic {
   position: absolute;
-  left: 60%;
+  left: 40%;
   top: 50%;
+}
+
+#audioInput {
+  position: absolute;
+  left: 57%;
+  top: 40%;
 }
 
 #mediaSubmitButton {
   position: absolute;
-  left: 50%;
+  left: 45%;
   top: 70%;
 }
 
