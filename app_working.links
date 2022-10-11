@@ -45,11 +45,14 @@ fun serverLoop(clients) server {
 
 var serverPid = spawn { serverLoop([]) };
 
+typename DeviceID = String;
+typename Uuid = String;
+
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right | Still |];
 
-typename PositionInfo = (id: String, x : Float, y : Float);
-typename IconInfo = (id: String, name : String, imageURL : String);
+typename PositionInfo = (id: Uuid, x : Float, y : Float);
+typename IconInfo = (id: Uuid, name : String, imageURL : String);
 
 typename ServerMessage = [| CharacterPosition : PositionInfo | CharacterIcon : IconInfo |];
 
@@ -70,11 +73,11 @@ typename RequestMsg =
   [| Position:ServerMessage | Icon:ServerMessage | RetrieveMsg:Process({hear:ServerMessage}) |];
 
 #datetype for character
-typename CharacterData = (id: String, name: String, x : Float, y: Float, imageURL : String);
+typename CharacterData = (id: Uuid, name: String, x : Float, y: Float, imageURL : String);
 
 #this is the model for MVU
 typename Room =
-  (charData : CharacterData, directionV : CharacterState, directionH : CharacterState, state : String, nameField : String, cameraId : String, micId : String, others : [CharacterData], pid:Process({hear:RequestMsg}));
+  (charData : CharacterData, directionV : CharacterState, directionH : CharacterState, state : String, nameField : String, cameraId : DeviceID, micId : DeviceID, others : [CharacterData], pid:Process({hear:RequestMsg}));
 
 #parameters
 var halfWidth = 560.0;
@@ -274,7 +277,6 @@ fun processServerMsg(serverMsg, room) {
         var appendToOthers = charData :: room.others;
         var cData = room.charData;
         var charIcon = CharacterIcon(id = cData.id, name = cData.name, imageURL = cData.imageURL);
-        print(cData.imageURL);
         serverPid ! BroadcastIcon(charIcon);
         (room with others = appendToOthers)
       } else {

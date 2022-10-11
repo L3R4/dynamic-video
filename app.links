@@ -55,8 +55,8 @@ typename Uuid = String;
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right | Still |];
 
-typename PositionInfo = (id: String, x : Float, y : Float);
-typename IconInfo = (id: String, name : String, imageURL : String);
+typename PositionInfo = (id: Uuid, x : Float, y : Float);
+typename IconInfo = (id: Uuid, name : String, imageURL : String);
 
 typename ServerMessage = [| CharacterPosition : PositionInfo | CharacterIcon : IconInfo |];
 
@@ -78,7 +78,7 @@ typename CharacterData = (id: Uuid, name: String, x : Float, y: Float, imageURL 
 
 #this is the model for MVU
 typename Room =
-  (charData : CharacterData, directionV : CharacterState, directionH : CharacterState, state : String, nameField : String, cameraId : String, micId : String, others : [CharacterData]);
+  (charData : CharacterData, directionV : CharacterState, directionH : CharacterState, state : String, nameField : String, cameraId : DeviceID, micId : DeviceID, others : [CharacterData]);
 
 #parameters
 var halfWidth = 560.0;
