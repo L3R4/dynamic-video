@@ -73,7 +73,7 @@ typename RequestMsg =
   [| Position:ServerMessage | Icon:ServerMessage | RetrieveMsg:Process({hear:ServerMessage}) |];
 
 #datetype for character
-typename CharacterData = (id: Uuid, name: String, x : Float, y: Float, imageURL : String);
+typename CharacterData = (id: Uuid, name: String, x : Float, y: Float, init : Bool, imageURL : String);
 
 #this is the model for MVU
 typename Room =
@@ -86,7 +86,7 @@ var charVelocity = 5.0;
 
 #default room to start with
 fun defaultRoom(clientPid) {
-  (charData = (id = "None", name = "None", x = halfWidth, y = halfHeight, imageURL = "None"),
+  (charData = (id = "None", name = "None", x = halfWidth, y = halfHeight, init = false, imageURL = "None"),
   directionV = Still, directionH = Still, state = "enterName", nameField = "", cameraId = "None", micId = "None", others = [], pid = clientPid)
 }
 
@@ -208,19 +208,30 @@ fun getCharWithId(id, chars) {
   }
 }
 
+fun connectTo(charData) {
+  var connectionInitialised = charData.init;
+  if (not(connectionInitialised)) {
+    print("Calling connectToUser");
+    WebRTC.connectToUser(charData.id);
+    if (WebRTC.checkIfConnectedToPeer(c1.id)) {
+      JSApp.addPeerToList(c1.id);
+      JSApp.displayLiveStream(c1.id);
+      false
+    } else {
+      connectTo(charData)
+    }
+  } else {
+    true
+  }
+}
+
 #checks if user's character is close to another's character, then displays their cam
 sig closeEnough : (CharacterData, CharacterData, Bool) ~> ()
-fun closeEnough(c1, c2, isMover) {
+fun closeEnough(localChar, peerChar, isMover) {
   var distance = sqrt((c2.x -. c1.x)^.2.0 +. (c2.y -. c1.y)^.2.0);
   if (distance <= 150.0) {
     if (isMover) {
-      WebRTC.connectToUser(c1.id);
-      if (WebRTC.checkIfConnectedToPeer(c1.id)) {
-        JSApp.addPeerToList(c1.id);
-        JSApp.displayLiveStream(c1.id)
-      } else {
-        ()
-      }
+      connectTo(c1);
     } else {
       if (WebRTC.checkIfConnectedToPeer(c1.id)) {
         JSApp.addPeerToList(c1.id);
@@ -240,8 +251,67 @@ fun closeToOthers(c, others) {
   switch(others) {
     case [] -> ()
     case x::xs ->
-      closeEnough(x, c, true);
+      closeEnough(c, x, true);
       closeToOthers(c, xs)
+  }
+}
+
+fun isCloseToPeer(localChar, peerChar) {
+  var distance = sqrt((peerChar.x -. localChar.x)^.2.0 +. (peerChar.y -. localChar.y)^.2.0);
+  if (distance <= 150.0)
+    true
+  else
+    false
+}
+
+fun connectToPeer(localChar, peerChar) {
+
+}
+
+fun connectToPeers(localChar, peerChars) {
+  switch(peerChars) {
+    case [] -> ()
+    case x::xs ->
+      connectToPeer(localChar, x);
+      connectToPeers(xs)
+  }
+}
+
+fun getClosePeers(localChar, others) {
+  switch(others) {
+    case [] -> ()
+    case x::xs ->
+      var isClose = isCloseToPeer(localChar, x);
+      if (isClose)
+        x :: getClosePeers(localChar, xs)
+      else
+        getClosePeers(xs)
+  }
+}
+
+fun checkIfPeerIsClosePeer(peerChar, closePeers) {
+  switch(closePeers) {
+    case [] -> false
+    case x::xs ->
+      if (x.id == peerChar.id)
+        true
+      else
+        checkIfPeerIsClosePeer(peerChar, xs)
+  }
+}
+
+fun modifyPeerInits(allPeers, closePeers) {
+  switch(allPeers) {
+    case [] -> ()
+    case x::xs ->
+      var peerIsClosePeer = checkIfPeerIsClosePeer(x, closePeers);
+      if (peerIsClosePeer) {
+        x.init = true;
+        x :: modifyPeerInits(xs, closePeers)
+      } else {
+        x.init = false;
+        x :: modifyPeerInits(xs, closePeers)
+      }
   }
 }
 
@@ -266,7 +336,7 @@ fun processServerMsg(serverMsg, room) {
         var newChar = (currentChar with x = info.x, y = info.y);
         var removeOther = removeChar(newChar, room.others);
         var addNewOther = newChar :: removeOther;
-        closeEnough(newChar, room.charData, false);
+        closeEnough(room.charData, newChar, false);
         (room with others = addNewOther)
       } else {
         room
@@ -299,7 +369,11 @@ fun updt(msg, room) {
       if (room.state == "joined") {
         var newCharV = moveChar(room.charData, i);
         var newCharH = moveChar(newCharV, room.directionH);
-        closeToOthers(newCharH, room.others);
+        #closeToOthers(newCharH, room.others);
+        var closePeers = getClosePeers(room.charData, room.others);
+        connectToPeers(room.charData, closePeers);
+        var peers = modifyPeerInits(room.others, closePeers);
+        ###################HERE###################
         var charPos = CharacterPosition(id = newCharH.id, x = newCharH.x, y = newCharH.y);
         serverPid ! BroadcastPosition(charPos);
         ((room with charData = newCharH, directionV = i), MvuCommands.empty)
@@ -558,7 +632,6 @@ fun clientRegister() {
 }
 
 fun runMVU(clientPid) {
-  #WebRTC.waitForWebcam();
   Mvu.run("placeholder", defaultRoom(clientPid), view, updt,
       subscriptions, MvuCommands.spawnProc(fun () { retrieveServerMessage(clientPid) }));
   ()

@@ -155,6 +155,7 @@ function _setLocalDescForPC(peerUuid, sdpType) {
 }
 
 function _setRemoteDescForPC(peerUuid, desc) {
+  console.log('Set remote desc!');
   let sdpObj = JSON.parse(desc);
   let rtcDesc = new RTCSessionDescription(sdpObj.sdp);
   peerConnections[peerUuid].pc.setRemoteDescription(rtcDesc).then(function() {
