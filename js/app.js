@@ -38,6 +38,14 @@ function _displayLiveStream(id) {
   }
 }
 
+function _displayedPeerStream(id) {
+  if (document.getElementById('remoteVideo_' + id + 'Div')) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 function _removePeerVideoDiv(peerUuid) {
   let div = document.getElementById('remoteVideo_' + peerUuid + 'Div');
   if (div) {
@@ -95,6 +103,7 @@ function _addPeerToList(uuid) {
 }
 
 let displayLiveStream = LINKS.kify(_displayLiveStream);
+let displayedPeerStream = LINKS.kify(_displayedPeerStream);
 let removePeerVideoDiv = LINKS.kify(_removePeerVideoDiv);
 let takePicture = LINKS.kify(_takePicture);
 let getPictureURL = LINKS.kify(_getPictureURL);

@@ -108,6 +108,7 @@ function _createLocalStreamElement() {
 
 function _setUpPC(peerUuid) {
   peerConnections[peerUuid] = {'pc': new RTCPeerConnection(peerConnectionConfig),
+                              'connectionInitiated': false,
                               'iceCandidates': [],
                               'localDescSet': false,
                               'remoteDescSet': false,
@@ -211,6 +212,15 @@ function _checkIfConnectedToPeer(peerUuid) {
   return false;
 }
 
+function _checkIfConnectionInitiated(peerUuid) {
+  if (peerConnections[peerUuid]) {
+    if (peerConnections[peerUuid].connectionInitiated) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function _disconnectFromUser(peerUuid) {
   if (peerConnections[peerUuid]) {
     console.log(`disconnecting from peer, ${peerUuid}`);
@@ -279,6 +289,7 @@ let getLocalDescForPC = LINKS.kify(_getLocalDescForPC);
 let setRemoteDescForPC = LINKS.kify(_setRemoteDescForPC);
 let checkIfRemoteDescSetForPC = LINKS.kify(_checkIfRemoteDescSetForPC);
 let checkIfConnectedToPeer = LINKS.kify(_checkIfConnectedToPeer);
+let checkIfConnectionInitiated = LINKS.kify(_checkIfConnectionInitiated);
 let disconnectFromUser = LINKS.kify(_disconnectFromUser);
 let collectCandidates = LINKS.kify(_collectCandidates);
 let addCandidates = LINKS.kify(_addCandidates);

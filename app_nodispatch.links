@@ -9,6 +9,7 @@ import WebRTC;
 module JSApp {
   alien javascript "js/app.js" {
     displayLiveStream : (String) ~> ();
+    displayedPeerStream : (String) ~> Bool;
     removePeerVideoDiv : (String) ~> ();
     takePicture : () ~> ();
     getPictureURL : () ~> String;
@@ -73,7 +74,7 @@ typename RequestMsg =
   [| Position:ServerMessage | Icon:ServerMessage | RetrieveMsg:Process({hear:ServerMessage}) |];
 
 #datetype for character
-typename CharacterData = (id: Uuid, name: String, x : Float, y: Float, init : Bool, imageURL : String);
+typename CharacterData = (id: Uuid, name: String, x : Float, y: Float, imageURL : String);
 
 #this is the model for MVU
 typename Room =
@@ -86,7 +87,7 @@ var charVelocity = 5.0;
 
 #default room to start with
 fun defaultRoom(clientPid) {
-  (charData = (id = "None", name = "None", x = halfWidth, y = halfHeight, init = false, imageURL = "None"),
+  (charData = (id = "None", name = "None", x = halfWidth, y = halfHeight, imageURL = "None"),
   directionV = Still, directionH = Still, state = "enterName", nameField = "", cameraId = "None", micId = "None", others = [], pid = clientPid)
 }
 
@@ -160,6 +161,17 @@ fun mediaClickHandler() {
   })
 }
 
+fun isCharInList(c, lst) {
+  switch(lst) {
+    case [] -> false
+    case x::xs ->
+      if (x.id == c.id)
+        true
+      else
+        isCharInList(c, xs)
+  }
+}
+
 #moves character in certain direction
 fun moveChar(charData, direction) {
   if (direction == Up) {
@@ -208,54 +220,6 @@ fun getCharWithId(id, chars) {
   }
 }
 
-fun connectTo(charData) {
-  var connectionInitialised = charData.init;
-  if (not(connectionInitialised)) {
-    print("Calling connectToUser");
-    WebRTC.connectToUser(charData.id);
-    if (WebRTC.checkIfConnectedToPeer(c1.id)) {
-      JSApp.addPeerToList(c1.id);
-      JSApp.displayLiveStream(c1.id);
-      false
-    } else {
-      connectTo(charData)
-    }
-  } else {
-    true
-  }
-}
-
-#checks if user's character is close to another's character, then displays their cam
-sig closeEnough : (CharacterData, CharacterData, Bool) ~> ()
-fun closeEnough(localChar, peerChar, isMover) {
-  var distance = sqrt((c2.x -. c1.x)^.2.0 +. (c2.y -. c1.y)^.2.0);
-  if (distance <= 150.0) {
-    if (isMover) {
-      connectTo(c1);
-    } else {
-      if (WebRTC.checkIfConnectedToPeer(c1.id)) {
-        JSApp.addPeerToList(c1.id);
-        JSApp.displayLiveStream(c1.id)
-      } else {
-       ()
-      }
-    }
-  } else {
-    WebRTC.disconnectFromUser(c1.id);
-    JSApp.removePeerVideoDiv(c1.id)
-  }
-}
-
-#checks whether the user is close to any of their peers
-fun closeToOthers(c, others) {
-  switch(others) {
-    case [] -> ()
-    case x::xs ->
-      closeEnough(c, x, true);
-      closeToOthers(c, xs)
-  }
-}
-
 fun isCloseToPeer(localChar, peerChar) {
   var distance = sqrt((peerChar.x -. localChar.x)^.2.0 +. (peerChar.y -. localChar.y)^.2.0);
   if (distance <= 150.0)
@@ -264,28 +228,73 @@ fun isCloseToPeer(localChar, peerChar) {
     false
 }
 
-fun connectToPeer(localChar, peerChar) {
+fun confirmConnection(peerChar) {
+  if (WebRTC.checkIfConnectedToPeer(peerChar.id)) {
+    JSApp.addPeerToList(peerChar.id);
+    JSApp.displayLiveStream(peerChar.id)
+  } else {
+    confirmConnection(peerChar)
+  }
+}
 
+fun connectToPeer(localChar, peerChar) {
+  print("Calling connectToUser");
+  WebRTC.connectToUser(peerChar.id);
+  confirmConnection(peerChar)
 }
 
 fun connectToPeers(localChar, peerChars) {
   switch(peerChars) {
     case [] -> ()
     case x::xs ->
-      connectToPeer(localChar, x);
-      connectToPeers(xs)
+      if (WebRTC.checkIfConnectionInitiated(x.id) == false) {
+        connectToPeer(localChar, x);
+        connectToPeers(localChar, xs)
+      } else {
+        connectToPeers(localChar, xs)
+      }
+  }
+}
+
+fun disconnectFromPeer(localChar, peerChar) {
+  WebRTC.disconnectFromUser(peerChar.id);
+  JSApp.removePeerVideoDiv(peerChar.id)
+}
+
+fun disconnectFromPeers(localChar, peerChars) {
+  switch(peerChars) {
+    case [] -> ()
+    case x::xs ->
+    if (WebRTC.checkIfConnectedToPeer(x.id) || WebRTC.checkIfConnectionInitiated(x.id)) {
+      disconnectFromPeer(localChar, x);
+      disconnectFromPeers(localChar, xs)
+    } else {
+      disconnectFromPeers(localChar, xs)
+    }
   }
 }
 
 fun getClosePeers(localChar, others) {
   switch(others) {
-    case [] -> ()
+    case [] -> []
     case x::xs ->
       var isClose = isCloseToPeer(localChar, x);
       if (isClose)
         x :: getClosePeers(localChar, xs)
       else
-        getClosePeers(xs)
+        getClosePeers(localChar, xs)
+  }
+}
+
+fun getFarPeers(others, closePeers) {
+  switch(others) {
+    case [] -> []
+    case x::xs ->
+      var isFarPeer = not(isCharInList(x, closePeers));
+      if (isFarPeer)
+        x :: getFarPeers(xs, closePeers)
+      else
+        getFarPeers(xs, closePeers)
   }
 }
 
@@ -297,21 +306,6 @@ fun checkIfPeerIsClosePeer(peerChar, closePeers) {
         true
       else
         checkIfPeerIsClosePeer(peerChar, xs)
-  }
-}
-
-fun modifyPeerInits(allPeers, closePeers) {
-  switch(allPeers) {
-    case [] -> ()
-    case x::xs ->
-      var peerIsClosePeer = checkIfPeerIsClosePeer(x, closePeers);
-      if (peerIsClosePeer) {
-        x.init = true;
-        x :: modifyPeerInits(xs, closePeers)
-      } else {
-        x.init = false;
-        x :: modifyPeerInits(xs, closePeers)
-      }
   }
 }
 
@@ -336,8 +330,23 @@ fun processServerMsg(serverMsg, room) {
         var newChar = (currentChar with x = info.x, y = info.y);
         var removeOther = removeChar(newChar, room.others);
         var addNewOther = newChar :: removeOther;
-        closeEnough(room.charData, newChar, false);
-        (room with others = addNewOther)
+        var isClose = isCloseToPeer(room.charData, newChar);
+        if (isClose) {
+          if (WebRTC.checkIfConnectedToPeer(newChar.id) && not(JSApp.displayedPeerStream(newChar.id))) {
+            JSApp.addPeerToList(newChar.id);
+            JSApp.displayLiveStream(newChar.id);
+            (room with others = addNewOther)
+          } else {
+            (room with others = addNewOther)
+          }
+        } else {
+          if (WebRTC.checkIfConnectedToPeer(newChar.id) || WebRTC.checkIfConnectionInitiated(newChar.id)) {
+            disconnectFromPeer(room.charData, newChar);
+            (room with others = addNewOther)
+          } else {
+            (room with others = addNewOther)
+          }
+        }
       } else {
         room
       }
@@ -369,11 +378,10 @@ fun updt(msg, room) {
       if (room.state == "joined") {
         var newCharV = moveChar(room.charData, i);
         var newCharH = moveChar(newCharV, room.directionH);
-        #closeToOthers(newCharH, room.others);
         var closePeers = getClosePeers(room.charData, room.others);
+        var farPeers = getFarPeers(room.others, closePeers);
         connectToPeers(room.charData, closePeers);
-        var peers = modifyPeerInits(room.others, closePeers);
-        ###################HERE###################
+        disconnectFromPeers(room.charData, farPeers);
         var charPos = CharacterPosition(id = newCharH.id, x = newCharH.x, y = newCharH.y);
         serverPid ! BroadcastPosition(charPos);
         ((room with charData = newCharH, directionV = i), MvuCommands.empty)
@@ -385,7 +393,10 @@ fun updt(msg, room) {
       if (room.state == "joined") {
         var newCharH = moveChar(room.charData, i);
         var newCharV = moveChar(newCharH, room.directionV);
-        closeToOthers(newCharV, room.others);
+        var closePeers = getClosePeers(room.charData, room.others);
+        var farPeers = getFarPeers(room.others, closePeers);
+        connectToPeers(room.charData, closePeers);
+        disconnectFromPeers(room.charData, farPeers);
         var charPos = CharacterPosition(id = newCharV.id, x = newCharV.x, y = newCharV.y);
         serverPid ! BroadcastPosition(charPos);
         ((room with charData = newCharV, directionH = i), MvuCommands.empty)

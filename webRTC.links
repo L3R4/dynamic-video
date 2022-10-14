@@ -31,6 +31,7 @@ module JSWebRTC {
         setRemoteDescForPC : (Uuid, Desc) ~> ();
         checkIfRemoteDescSetForPC : (Uuid) ~> Bool;
         checkIfConnectedToPeer : (Uuid) ~> Bool;
+        checkIfConnectionInitiated : (Uuid) ~> Bool;
         disconnectFromUser : (Uuid) ~> ();
         collectCandidates : () ~> (Candidates);
         addCandidates : (Candidates, Uuid) ~> ();
@@ -121,6 +122,10 @@ fun handleOfferForPC(peerUuid, remoteDesc) {
 
 fun checkIfConnectedToPeer(peerUuid) {
   JSWebRTC.checkIfConnectedToPeer(peerUuid)
+}
+
+fun checkIfConnectionInitiated(peerUuid) {
+  JSWebRTC.checkIfConnectionInitiated(peerUuid)
 }
 
 fun handleMessage(msg) {
