@@ -41,9 +41,9 @@ module JSWebRTC {
 fun broadcast(clients, msg) server {
   switch (clients) {
     case [] -> ()
-    case c::clients ->
-      c ! msg;
-      broadcast(clients, msg)
+    case x::xs ->
+      x ! msg;
+      broadcast(xs, msg)
   }
 }
 

@@ -108,7 +108,6 @@ function _createLocalStreamElement() {
 
 function _setUpPC(peerUuid) {
   peerConnections[peerUuid] = {'pc': new RTCPeerConnection(peerConnectionConfig),
-                              'connectionInitiated': false,
                               'iceCandidates': [],
                               'localDescSet': false,
                               'remoteDescSet': false,
@@ -214,9 +213,7 @@ function _checkIfConnectedToPeer(peerUuid) {
 
 function _checkIfConnectionInitiated(peerUuid) {
   if (peerConnections[peerUuid]) {
-    if (peerConnections[peerUuid].connectionInitiated) {
-      return true;
-    }
+    return true;
   }
   return false;
 }
