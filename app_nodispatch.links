@@ -6,16 +6,18 @@ import Mvu;
 import MvuCommands;
 import WebRTC;
 
+typename ID = Int;
+
 module JSApp {
   alien javascript "js/app.js" {
-    displayLiveStream : (String) ~> ();
-    displayedPeerStream : (String) ~> Bool;
-    removePeerVideoDiv : (String) ~> ();
+    displayLiveStream : (ID) ~> ();
+    displayedPeerStream : (ID) ~> Bool;
+    removePeerVideoDiv : (ID) ~> ();
     takePicture : () ~> ();
     getPictureURL : () ~> String;
-    displayIcon : (String, String, String, String) ~> ();
+    displayIcon : (ID, String, String, String) ~> ();
     getSelectedOptions : () ~> [String];
-    addPeerToList : (String) ~> ();
+    addPeerToList : (ID) ~> ();
   }
 }
 
@@ -45,13 +47,12 @@ fun serverLoop(clients) server {
 var serverPid = spawn { serverLoop([]) };
 
 typename DeviceID = String;
-typename Uuid = String;
 
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
 
-typename PositionInfo = (id: Uuid, x : Float, y : Float);
-typename IconInfo = (id: Uuid, name : String, imageURL : String, x : Float, y : Float);
+typename PositionInfo = (id: ID, x : Float, y : Float);
+typename IconInfo = (id: ID, name : String, imageURL : String, x : Float, y : Float);
 
 typename ServerMessage = 
   [| CharacterPosition : PositionInfo
@@ -78,7 +79,7 @@ typename RequestMsg =
 
 #datetype for character
 typename CharacterData = 
-  (id: Uuid, 
+  (id: ID, 
    name: String,
    x : Float, 
    y: Float, 
@@ -113,7 +114,7 @@ var charVelocity = 5.0;
 #default room to start with
 fun defaultRoom(clientPid) {
   (charData = 
-    (id = "None", 
+    (id = 0, 
      name = "None", 
      x = halfWidth, 
      y = halfHeight, 
@@ -323,30 +324,34 @@ fun isCloseToPeer(localChar, peerChar) {
     false
 }
 
-fun confirmConnection(peerChar) {
+fun confirmConnection(localChar, peerChar) {
   if (WebRTC.checkIfConnectedToPeer(peerChar.id)) {
     JSApp.addPeerToList(peerChar.id);
-    JSApp.displayLiveStream(peerChar.id)
+    JSApp.displayLiveStream(peerChar.id);
+    var charPos = CharacterPosition(id = localChar.id, x = localChar.x, y = localChar.y);
+    serverPid ! BroadcastMessage(charPos)
+  } else if (not(WebRTC.checkIfPCObjectExists(peerChar.id))){
+    print("Connection doesn't even exist anymore, silly")
   } else {
-    confirmConnection(peerChar)
+    confirmConnection(localChar, peerChar)
   }
 }
 
-fun connectToPeer(peerChar) {
+fun connectToPeer(localChar, peerChar) {
   print("Calling connectToUser");
   WebRTC.connectToUser(peerChar.id);
-  confirmConnection(peerChar)
+  confirmConnection(localChar, peerChar)
 }
 
-fun connectToPeers(peerChars) {
+fun connectToPeers(charData, peerChars) {
   switch(peerChars) {
     case [] -> ()
     case x::xs ->
-      if (WebRTC.checkIfConnectionInitiated(x.id) == false) {
-        connectToPeer(x);
-        connectToPeers(xs)
+      if (WebRTC.checkIfPCObjectExists(x.id) == false) {
+        var connId = spawnClient { connectToPeer(charData, x) };
+        connectToPeers(charData, xs)
       } else {
-        connectToPeers(xs)
+        connectToPeers(charData, xs)
       }
   }
 }
@@ -361,7 +366,7 @@ fun disconnectFromPeers(peerChars) {
     case [] -> ()
     case x::xs ->
     if (WebRTC.checkIfConnectedToPeer(x.id) || 
-        WebRTC.checkIfConnectionInitiated(x.id)
+        WebRTC.checkIfPCObjectExists(x.id)
         ) {
       disconnectFromPeer(x);
       disconnectFromPeers(xs)
@@ -398,7 +403,7 @@ fun getFarPeers(others, closePeers) {
 fun manageConnections(charData, peerChars) {
   var closePeers = getClosePeers(charData, peerChars);
   var farPeers = getFarPeers(peerChars, closePeers);
-  connectToPeers(closePeers);
+  connectToPeers(charData, closePeers);
   disconnectFromPeers(farPeers);
   ()
 }
@@ -408,7 +413,6 @@ fun manageConnections(charData, peerChars) {
 #retrieving the new charData
 sig retrieveServerMessage : (%) {}~> Msg
 fun retrieveServerMessage(pid) {
-  print("Getting message!");
   spawnWait {
     pid ! RetrieveMsg(self());
     receive {
@@ -443,7 +447,7 @@ fun processServerMsg(serverMsg, room) {
           }
         } else {
           if (WebRTC.checkIfConnectedToPeer(newChar.id) || 
-              WebRTC.checkIfConnectionInitiated(newChar.id)
+              WebRTC.checkIfPCObjectExists(newChar.id)
               ) {
             disconnectFromPeer(newChar);
             (room with others = newPeerList)
@@ -455,7 +459,6 @@ fun processServerMsg(serverMsg, room) {
         room
       }
     case CharacterIcon(info) ->
-      print("Received Icon from: " ^^ info.name);
       if (info.id <> room.charData.id && 
           room.state == "joined" && 
           not(charWithIdExists(info.id, room.others))
@@ -535,7 +538,7 @@ fun updt(msg, room) {
     case Joined ->
       JSApp.takePicture();
       var pictureURL = JSApp.getPictureURL();
-      var cData = (room.charData with id = WebRTC.getUUID(), name = room.nameField, imageURL = pictureURL);
+      var cData = (room.charData with id = WebRTC.getID(), name = room.nameField, imageURL = pictureURL);
       var charIcon = CharacterIcon(id = cData.id, name = cData.name, imageURL = pictureURL, x = cData.x, y = cData.y);
       serverPid ! BroadcastMessage(charIcon);
       ((room with charData = cData, state = "joined"), MvuCommands.empty)
@@ -669,7 +672,7 @@ fun enterMediaView() {
 }
 
 fun enterImageView() {
-  JSApp.displayLiveStream("local");
+  JSApp.displayLiveStream(0);
   div (id ("canvas"),
     div (id ("joinBox"),
       ch([
@@ -734,19 +737,11 @@ fun drain(messages, pids) {
 fun clientLoop(msgs, pids) {
     receive {
       case Message(msg) ->
-        switch(msg) {
-          case CharacterPosition(info) ->
-            var (msgs, pids) = drain(msgs ++ [msg], pids);
-            clientLoop(msgs, pids)
-
-          case CharacterIcon(info) ->
-            var (msgs, pids) = drain(msgs ++ [msg], pids);
-            clientLoop(msgs, pids)
-        }
+        var (msgs, pids) = drain(msgs ++ [msg], pids);
+        clientLoop(msgs, pids)
+      
       case RetrieveMsg(pid) ->
         var (msgs, pids) = drain(msgs, pids ++ [pid]);
-        print("Number of messages: " ^^ intToString(length(msgs)));
-        print("Number of pids: " ^^ intToString(length(pids)));
         clientLoop(msgs, pids)
     }
 }
