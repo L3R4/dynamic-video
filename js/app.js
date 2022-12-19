@@ -1,5 +1,31 @@
 let peerUuids = {};
 let imgURL = "";
+const adjectives = ["Excited", "Anxious", "Overweight", "Demonic", "Jumpy", 
+                   "Misunderstood", "Squashed", "Gargantuan","Broad", "Crooked", 
+                   "Curved", "Deep", "Even", "Impartial", "Certain", "Eight", 
+                   "Grubby", "Wiry", "Half", "Merciful", "Uppity", 
+                   "Ahead", "Rainy", "Sunny", "Boorish", "Spiffy", "Flat", "Hilly", 
+                   "Jagged", "Round", "Shallow", "Square", "Steep", "Straight", 
+                   "Thick", "Thin", "Cooing", "Deafening", "Faint", "Harsh", 
+                   "High-pitched", "Hissing", "Hushed", "Husky", "Loud", "Melodic", 
+                   "Moaning", "Mute", "Noisy", "Purring", "Quiet", "Raspy", 
+                   "Screeching", "Shrill", "Silent", "Soft", "Squeaky", "Squealing", 
+                   "Thundering", "Voiceless", "Whispering", "Stupid", "Dumb", 
+                   "Lovely", "Horrid", "Weird", "Flabby", "Silly", "Mup", "Blab", 
+                   "Green", "Blue", "Yelly", "Pure", "Maroon", "Flump", "Flob", 
+                   "Red", "Poop", "Sloop", "Fyip", "Gymby", "Stapid", "Mallop",
+                   "Vexing", "Aback", "Scared", "Wimp", "Weakly", "Intery", "Massive", 
+                   "Party", "Teensy", "Meany", "Malder", "Coper", "Seether", "Crap",
+                   "OOTW", "GOAT"];
+
+function _getName(id) {
+  return adjectives[id-1];
+}
+
+function _checkLocalVidExists() {
+  const localVid = document.getElementById('localVideoDiv');
+  return !!localVid ? true : false;
+}
 
 function arrangeVideoDivs() {
   let multiplier = 0;
@@ -25,7 +51,21 @@ function appendVidToDiv(id, local) {
   }
   divElement.appendChild(newLocalVid);
   document.body.appendChild(divElement);
+  document.body.removeChild(localVid);
   arrangeVideoDivs();
+}
+
+function _addAudio(id) {
+  const divElement = document.createElement('div');
+  divElement.setAttribute('id', 'remoteAudio_' + id + 'Div');
+  const localAud = document.getElementById('remoteAudio_' + id + 'Temp')
+  const newLocalAud = document.createElement('audio');
+  newLocalAud.setAttribute('id', id);
+  newLocalAud.setAttribute('autoplay', 'true');
+  newLocalAud.srcObject = localAud.srcObject;
+  divElement.appendChild(newLocalAud);
+  document.body.appendChild(divElement);
+  document.body.removeChild(localAud);
 }
 
 function _displayLiveStream(id) {
@@ -39,7 +79,9 @@ function _displayLiveStream(id) {
 }
 
 function _displayedPeerStream(id) {
-  if (document.getElementById('remoteVideo_' + id + 'Div')) {
+  const peerVidDiv = document.getElementById('remoteVideo_' + id + 'Div');
+  const peerAudDiv = document.getElementById('remoteAudio_' + id + 'Div');
+  if (!!peerVidDiv || !!peerAudDiv) {
     return true;
   } else {
     return false;
@@ -53,6 +95,17 @@ function _removePeerVideoDiv(peerUuid) {
     document.body.removeChild(div);
     delete peerUuids[peerUuid];
     arrangeVideoDivs();
+  } else if (div2) {
+    document.body.removeChild(div2);
+  }
+}
+
+function _removePeerAudioDiv(peerUuid) {
+  let div = document.getElementById('remoteAudio_' + peerUuid + 'Div');
+  let div2 = document.getElementById('remoteAudio_' + peerUuid + 'Temp');
+  if (div) {
+    document.body.removeChild(div);
+    delete peerUuids[peerUuid];
   } else if (div2) {
     document.body.removeChild(div2);
   }
@@ -105,11 +158,15 @@ function _addPeerToList(uuid) {
   peerUuids[uuid] = uuid;
 }
 
+let addAudio = LINKS.kify(_addAudio);
 let displayLiveStream = LINKS.kify(_displayLiveStream);
 let displayedPeerStream = LINKS.kify(_displayedPeerStream);
 let removePeerVideoDiv = LINKS.kify(_removePeerVideoDiv);
+let removePeerAudioDiv = LINKS.kify(_removePeerAudioDiv);
 let takePicture = LINKS.kify(_takePicture);
 let getPictureURL = LINKS.kify(_getPictureURL);
 let displayIcon = LINKS.kify(_displayIcon);
 let getSelectedOptions = LINKS.kify(_getSelectedOptions);
 let addPeerToList = LINKS.kify(_addPeerToList);
+let getName = LINKS.kify(_getName);
+let checkLocalVidExists = LINKS.kify(_checkLocalVidExists);

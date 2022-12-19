@@ -20,6 +20,7 @@ module JSWebRTC {
         getCameraReady : (DeviceID) ~> ();
         getMicReady : (DeviceID) ~> ();
         createLocalStreamElement : () ~> ();
+        setAudioOnly : () ~> ();
         setLocalID : (Int) ~> ();
         getLocalID : () ~> ID;
         setUpPC : (ID) ~> ();
@@ -32,6 +33,7 @@ module JSWebRTC {
         checkIfRemoteDescSetForPC : (ID) ~> Bool;
         checkIfConnectedToPeer : (ID) ~> Bool;
         checkIfPCObjectExists : (ID) ~> Bool;
+        threeSecondsElapsed : (ID) ~> Bool;
         getBegunIceSearch : () ~> Bool;
         setBegunIceSearch : () ~> ();
         disconnectFromUser : (ID) ~> ();
@@ -88,6 +90,10 @@ fun checkIfConnectedToPeer(peerID) {
 
 fun checkIfPCObjectExists(peerID) {
   JSWebRTC.checkIfPCObjectExists(peerID)
+}
+
+fun threeSecondsElapsed(peerID) {
+  JSWebRTC.threeSecondsElapsed(peerID)
 }
 
 fun handleIceCandidates() {
@@ -235,12 +241,26 @@ fun waitForMic() {
     waitForMic()
 }
 
-fun readyMediaDevices(camId, micId) {
+fun readyCam(camId) {
   JSWebRTC.getCameraReady(camId);
   waitForCamera();
+  ()
+}
+
+fun readyMic(micId) {
   JSWebRTC.getMicReady(micId);
   waitForMic();
-  JSWebRTC.createLocalStreamElement()
+  ()
+}
+
+fun createLocalVideo() {
+  JSWebRTC.createLocalStreamElement();
+  ()
+}
+
+fun setAudioOnly() {
+  JSWebRTC.setAudioOnly();
+  ()
 }
 
 # Loop thread run on the client, listens for messages from the server

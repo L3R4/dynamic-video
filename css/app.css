@@ -13,11 +13,19 @@ body {
   background-color: black;
 }
 
+.localName {
+  top: -70px;
+  left: 550px;
+  position: absolute;
+  font-family: fantasy;
+  font-size: 30px;
+}
+
 .charName {
   top: 70px;
-  left: 20px;
+  left: 15px;
   position: absolute;
-  font-family: verdana;
+  font-family: fantasy;
   color: rgb(0,0,0);
 }
 
