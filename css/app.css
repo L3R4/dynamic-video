@@ -116,22 +116,29 @@ body {
 }
 
 .webcam {
-  border: 5px solid #000;
+  border: 0px solid #000;
   border-radius: 25%;
+  -webkit-transform: scale(0);
+  -moz-transform: scale(0);
 }
 
 .cameraMode {
   position: absolute;
   left: 48%;
   top: 55%;
-  transform: translate(-50%, -50%)
+  transform: translate(-50%, -50%);
 }
 
 .webcamMode {
   position: absolute;
   left: 80%;
   top: 80%;
-  transform: translate(-50%, -50%)
+  transform: translate(-50%, -50%);
+}
+
+#localVideo {
+  -webkit-transform: 0;
+  -moz-transform: 0;
 }
 /*
 #localVideoDiv {
