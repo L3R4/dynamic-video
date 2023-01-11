@@ -71,8 +71,8 @@ function _getCameraReady(camId) {
   }
   const constraints = {
     video: {
-      width: {max: 4},
-      height: {max: 3},
+      width: {max: 200},
+      height: {max: 150},
       frameRate: {max: 60},
       deviceId: camId
     },

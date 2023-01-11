@@ -118,8 +118,6 @@ body {
 .webcam {
   border: 0px solid #000;
   border-radius: 25%;
-  -webkit-transform: scale(50);
-  -moz-transform: scale(50);
 }
 
 .cameraMode {
@@ -135,7 +133,7 @@ body {
   top: 80%;
   transform: translate(-50%, -50%);
 }
-
+/*
 #localVideo {
   -webkit-transform: scale(50);
   -moz-transform: scale(50);
