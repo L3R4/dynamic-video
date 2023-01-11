@@ -538,8 +538,8 @@ fun updt(msg, room) {
     
     #runs when user presses enter, and changes state of room to joined
     case MediaChosen(cameraID, micID) ->
-      WebRTC.readyMediaDevices(cameraID, micID);
-      WebRTC.registerUser();
+      #WebRTC.readyMediaDevices(cameraID, micID);
+      #WebRTC.registerUser();
       ((room with cameraId = cameraID, micId = micID, state = "enterImage"), MvuCommands.empty)
     
     case Joined ->
