@@ -46,7 +46,7 @@ fun serverLoop(clients) server {
               broadcast(clients, Message(msg));
               serverLoop(clients)
             case CharacterIcon(info) ->
-              print(" Icon from: " ^^ info.name);
+              print("Icon from: " ^^ info.name ^^ ", ");
               broadcast(clients, Message(msg));
               serverLoop(clients)
           }
