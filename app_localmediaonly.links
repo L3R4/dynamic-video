@@ -501,6 +501,7 @@ fun processServerMsg(serverMsg, room) {
           room.state == "joined" && 
           not(charWithIdExists(info.id, room.others))
           ) {
+        print("and in");
         var charData = 
           (id = info.id, 
            name = info.name, 
