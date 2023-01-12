@@ -778,6 +778,7 @@ fun drain(messages, pids) {
 fun clientLoop(msgs, pids) {
     receive {
       case Message(msg) ->
+        print("Got message");
         var (msgs, pids) = drain(msgs ++ [msg], pids);
         clientLoop(msgs, pids)
       
