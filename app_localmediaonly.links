@@ -118,7 +118,6 @@ fun defaultRoom(clientPid) {
   var localID = WebRTC.getID();
   var localName = JSApp.getName(localID);
   JSApp.takePicture();
-  print(intToString(localID));
   var pictureURL = JSApp.getPictureURL();
   var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, x = halfWidth, y = halfHeight);
   serverPid ! BroadcastMessage(charIcon);
@@ -228,6 +227,28 @@ fun isCharInList(c, lst) {
       else
         isCharInList(c, xs)
   }
+}
+
+fun printNames(chars) {
+  switch(chars) {
+    case [] -> ()
+    case x::xs ->
+      print(x.name);
+      printNames(xs)
+  }
+}
+
+fun printNamesHandler(chars) {
+  onClick(fun() {
+    if (length(chars) > 0) {
+      print("Other users:");
+      printNames(chars);
+      NoOp
+    } else {
+      print("No other users");
+      NoOp
+    }
+  })
 }
 
 sig setCharacterDirection : (DirectionRecord, CharacterState) ~> DirectionRecord
@@ -467,6 +488,8 @@ fun processServerMsg(serverMsg, room) {
         room
       }
     case CharacterIcon(info) ->
+      print("Got icon:");
+      print(info.name);
       if (info.id <> room.charData.id && 
           room.state == "joined" && 
           not(charWithIdExists(info.id, room.others))
@@ -701,9 +724,19 @@ fun enterImageView() {
 fun joinedView(room) {
   var elem = getNodeById("localVideoDiv");
   domSetAttributeFromRef(elem, "class", "webcamMode");
+  var name = room.charData.name;
   div (id ("canvas"), ch([
+    p (class("localName"), textNode(name)),
     drawChar(room.charData),
-    ch(listOfHTMLChars(room.others))
+    ch(listOfHTMLChars(room.others)),
+    input (
+      ca([
+        id ("printNames"),
+        type ("submit"),
+        value ("Print Users"),
+        printNamesHandler(room.others)
+      ]),
+      he)
   ]))
 }
 
