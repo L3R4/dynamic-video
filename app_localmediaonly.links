@@ -41,9 +41,16 @@ fun serverLoop(clients) server {
           serverLoop(newClients)
 
         case BroadcastMessage(msg) ->
-          print(intToString(length(clients)));
-          broadcast(clients, Message(msg));
-          serverLoop(clients)
+          switch(msg) {
+            case CharacterPosition(info) ->
+              broadcast(clients, Message(msg));
+              serverLoop(clients)
+            case CharacterIcon(info) ->
+              print(" Icon from: " ^^ info.name);
+              broadcast(clients, Message(msg));
+              serverLoop(clients)
+          }
+          
     }
 }
 
@@ -778,7 +785,6 @@ fun drain(messages, pids) {
 fun clientLoop(msgs, pids) {
     receive {
       case Message(msg) ->
-        print("Got message");
         var (msgs, pids) = drain(msgs ++ [msg], pids);
         clientLoop(msgs, pids)
       
