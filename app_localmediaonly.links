@@ -41,6 +41,7 @@ fun serverLoop(clients) server {
           serverLoop(newClients)
 
         case BroadcastMessage(msg) ->
+          print(intToString(length(clients)));
           broadcast(clients, Message(msg));
           serverLoop(clients)
     }
