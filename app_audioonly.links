@@ -230,6 +230,28 @@ fun isCharInList(c, lst) {
   }
 }
 
+fun printNames(chars) {
+  switch(chars) {
+    case [] -> ()
+    case x::xs ->
+      print(x.name);
+      printNames(xs)
+  }
+}
+
+fun printNamesHandler(chars) {
+  onClick(fun() {
+    if (length(chars) > 0) {
+      print("Other users:");
+      printNames(chars);
+      NoOp
+    } else {
+      print("No other users");
+      NoOp
+    }
+  })
+}
+
 sig setCharacterDirection : (DirectionRecord, CharacterState) ~> DirectionRecord
 fun setCharacterDirection(directions, direction) {
   if (direction == Up) {
@@ -486,6 +508,8 @@ fun processServerMsg(serverMsg, room) {
                         y = room.charData.y
                         );
         serverPid ! BroadcastMessage(charIcon);
+        serverPid ! BroadcastMessage(charIcon);
+        serverPid ! BroadcastMessage(charIcon);
         (room with others = appendToOthers)
       } else {
         room
@@ -497,7 +521,6 @@ fun processServerMsg(serverMsg, room) {
 sig updt : (Msg, Room) ~> (Room, MvuCommands.Command(Msg))
 fun updt(msg, room) {
   switch(msg) {
-
     #every frame, this is the case, updates room based on room
     case NewFrame ->
       var newChar = moveChar(room.charData, room.directions);
@@ -697,9 +720,19 @@ fun enterImageView() {
 }
 
 fun joinedView(room) {
+  var name = room.charData.name;
   div (id ("canvas"), ch([
+    p (class("localName"), textNode(name)),
     drawChar(room.charData),
-    ch(listOfHTMLChars(room.others))
+    ch(listOfHTMLChars(room.others)),
+    input (
+      ca([
+        id ("printNames"),
+        type ("submit"),
+        value ("Print Users"),
+        printNamesHandler(room.others)
+      ]),
+      he)
   ]))
 }
 
