@@ -509,6 +509,8 @@ fun processServerMsg(serverMsg, room) {
                         y = room.charData.y
                         );
         serverPid ! BroadcastMessage(charIcon);
+        serverPid ! BroadcastMessage(charIcon);
+        serverPid ! BroadcastMessage(charIcon);
         (room with others = appendToOthers)
       } else {
         room
