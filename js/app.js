@@ -1,6 +1,6 @@
 let peerUuids = {};
 let imgURL = "";
-const adjectives = ["Excited", "Anxious", "Overweight", "Demonic", "Jumpy", 
+const adjectives = ["Excited", "Anxious", "Demonic", "Jumpy", 
                    "Misunderstood", "Squashed", "Gargantuan","Broad", "Crooked", 
                    "Curved", "Deep", "Even", "Impartial", "Certain", "Eight", 
                    "Grubby", "Wiry", "Half", "Merciful", "Uppity", 
@@ -16,7 +16,7 @@ const adjectives = ["Excited", "Anxious", "Overweight", "Demonic", "Jumpy",
                    "Red", "Poop", "Sloop", "Fyip", "Gymby", "Stapid", "Mallop",
                    "Vexing", "Aback", "Scared", "Wimp", "Weakly", "Intery", "Massive", 
                    "Party", "Teensy", "Meany", "Malder", "Coper", "Seether", "Crap",
-                   "OOTW", "GOAT"];
+                   "OOTW", "GOAT", "Overweight"];
 
 function _getName(id) {
   return adjectives[id-1];
@@ -69,12 +69,11 @@ function _addAudio(id) {
 }
 
 function _displayLiveStream(id) {
-  if (id == 0 && !document.getElementById('localVideoDiv')) {
+  if (id == 0 && !!document.getElementById('localVideoTemp') && !document.getElementById('localVideoDiv')) {
     appendVidToDiv('localVideo', true);
-  } else if (id != 0 && !document.getElementById('remoteVideo_' + id + 'Div')){
-    if (document.getElementById('remoteVideo_' + id + 'Temp')) {
-      appendVidToDiv('remoteVideo_' + id, false);
-    }
+  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !document.getElementById('remoteVideo_' + id + 'Div')){
+    _addPeerToList(id);
+    appendVidToDiv('remoteVideo_' + id, false);
   }
 }
 

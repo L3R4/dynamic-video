@@ -355,10 +355,9 @@ fun isCloseToPeer(localChar, peerChar) {
 
 fun confirmConnection(localChar, peerChar) {
   if (WebRTC.checkIfConnectedToPeer(peerChar.id)) {
-    JSApp.addPeerToList(peerChar.id);
-    JSApp.displayLiveStream(peerChar.id);
-    var charPos = CharacterPosition(id = localChar.id, x = localChar.x, y = localChar.y);
-    serverPid ! BroadcastMessage(charPos)
+    JSApp.displayLiveStream(peerChar.id)
+    #var charPos = CharacterPosition(id = localChar.id, x = localChar.x, y = localChar.y);
+    #serverPid ! BroadcastMessage(charPos)
   } else if (not(WebRTC.checkIfPCObjectExists(peerChar.id))){
     print("Connection doesn't even exist anymore, silly")
   } else {
@@ -465,15 +464,8 @@ fun processServerMsg(serverMsg, room) {
         var newPeerList = replaceChar(newChar, room.others);
         var isClose = isCloseToPeer(room.charData, newChar);
         if (isClose) {
-          if (WebRTC.checkIfConnectedToPeer(newChar.id) && 
-              not(JSApp.displayedPeerStream(newChar.id))
-              ) {
-            JSApp.addPeerToList(newChar.id);
-            JSApp.displayLiveStream(newChar.id);
-            (room with others = newPeerList)
-          } else {
-            (room with others = newPeerList)
-          }
+          JSApp.displayLiveStream(newChar.id);
+          (room with others = newPeerList)
         } else {
           if (WebRTC.threeSecondsElapsed(newChar.id)) {
             disconnectFromPeer(newChar);
@@ -528,9 +520,9 @@ fun updt(msg, room) {
       var newChar = moveChar(room.charData, room.directions);
       var charMoved = characterMoved(room.charData, newChar);
       if (charMoved) {
-        manageConnections(room.charData, room.others);
         var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
         serverPid ! BroadcastMessage(charPos);
+        manageConnections(room.charData, room.others);
         ((room with charData = newChar), MvuCommands.empty)
       } else {
         (room, MvuCommands.empty)
