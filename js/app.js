@@ -56,16 +56,19 @@ function appendVidToDiv(id, local) {
 }
 
 function _addAudio(id) {
-  const divElement = document.createElement('div');
-  divElement.setAttribute('id', 'remoteAudio_' + id + 'Div');
-  const localAud = document.getElementById('remoteAudio_' + id + 'Temp')
-  const newLocalAud = document.createElement('audio');
-  newLocalAud.setAttribute('id', id);
-  newLocalAud.setAttribute('autoplay', 'true');
-  newLocalAud.srcObject = localAud.srcObject;
-  divElement.appendChild(newLocalAud);
-  document.body.appendChild(divElement);
-  document.body.removeChild(localAud);
+  if (!!document.getElementById('remoteAudio_' + id + 'Temp') && !document.getElementById('remoteAudio_' + id + 'Div')) {
+    _addPeerToList(id);
+    const divElement = document.createElement('div');
+    divElement.setAttribute('id', 'remoteAudio_' + id + 'Div');
+    const localAud = document.getElementById('remoteAudio_' + id + 'Temp')
+    const newLocalAud = document.createElement('audio');
+    newLocalAud.setAttribute('id', id);
+    newLocalAud.setAttribute('autoplay', 'true');
+    newLocalAud.srcObject = localAud.srcObject;
+    divElement.appendChild(newLocalAud);
+    document.body.appendChild(divElement);
+    document.body.removeChild(localAud);
+  }
 }
 
 function _displayLiveStream(id) {
