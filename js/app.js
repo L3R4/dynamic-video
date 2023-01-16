@@ -31,7 +31,7 @@ function arrangeVideoDivs() {
   let multiplier = 0;
   for (uuid in peerUuids) {
     let divElement = document.getElementById('remoteVideo_' + uuid + 'Div');
-    divElement.setAttribute('style', 'position: absolute; top: 20%; transform: translate(-50%, -50%); left: ' + (20 + (12*multiplier)).toString() + '%;');
+    divElement.setAttribute('style', 'position: absolute; top: 15vh; transform: translate(-50%, -50%); left: ' + (20 + (12*multiplier)).toString() + '%;');
     multiplier += 1;
   }
 }
