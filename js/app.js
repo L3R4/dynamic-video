@@ -1,4 +1,4 @@
-let peerUuids = {};
+const peerUuids = [];
 let imgURL = "";
 const adjectives = ["Excited", "Anxious", "Demonic", "Jumpy", 
                    "Misunderstood", "Squashed", "Gargantuan","Broad", "Crooked", 
@@ -27,12 +27,12 @@ function _checkLocalVidExists() {
   return !!localVid ? true : false;
 }
 
-function arrangeVideoDivs() {
-  let multiplier = 0;
-  for (uuid in peerUuids) {
-    let divElement = document.getElementById('remoteVideo_' + uuid + 'Div');
-    divElement.setAttribute('style', 'position: absolute; top: 15vh; transform: translate(-50%, -50%); left: ' + (20 + (12*multiplier)).toString() + '%;');
-    multiplier += 1;
+function arrangeVideoDivs(pos) {
+  for (let i = pos; i < peerUuids.length; i++) {
+    const divElement = document.getElementById('remoteVideo_' + peerUuids[i] + 'Div');
+    const leftPosStr = window.getComputedStyle(divElement).left;
+    const leftPos = parseInt(leftPosStr.substring(0, leftPosStr.length-2));
+    divElement.setAttribute('style', 'position: absolute; left: ' + (leftPos-200) + 'px;');
   }
 }
 
@@ -48,11 +48,17 @@ function appendVidToDiv(id, local) {
   if (local) {
     divElement.setAttribute('class', 'cameraMode');
     newLocalVid.muted = true;
+    divElement.appendChild(newLocalVid);
+    document.body.appendChild(divElement);
+  } else {
+    divElement.appendChild(newLocalVid);
+    const peerCount = peerUuids.length;
+    divElement.setAttribute('style', 'position: absolute; left: ' + ((peerCount-1)*200).toString() + 'px;');
+    const videoContainer = document.getElementById('streamScroll'); 
+    videoContainer.appendChild(divElement);
   }
-  divElement.appendChild(newLocalVid);
-  document.body.appendChild(divElement);
   document.body.removeChild(localVid);
-  arrangeVideoDivs();
+  //arrangeVideoDivs();
 }
 
 function _addAudio(id) {
@@ -91,12 +97,14 @@ function _displayedPeerStream(id) {
 }
 
 function _removePeerVideoDiv(peerUuid) {
+  const videoContainer = document.getElementById('streamScroll');
   let div = document.getElementById('remoteVideo_' + peerUuid + 'Div');
   let div2 = document.getElementById('remoteVideo_' + peerUuid + 'Temp');
   if (div) {
-    document.body.removeChild(div);
-    delete peerUuids[peerUuid];
-    arrangeVideoDivs();
+    videoContainer.removeChild(div);
+    const index = peerUuids.indexOf(peerUuid);
+    peerUuids.splice(index, 1);
+    arrangeVideoDivs(index);
   } else if (div2) {
     document.body.removeChild(div2);
   }
@@ -107,7 +115,8 @@ function _removePeerAudioDiv(peerUuid) {
   let div2 = document.getElementById('remoteAudio_' + peerUuid + 'Temp');
   if (div) {
     document.body.removeChild(div);
-    delete peerUuids[peerUuid];
+    const index = peerUuids.indexOf(peerUuid);
+    peerUuids.splice(index, 1);
   } else if (div2) {
     document.body.removeChild(div2);
   }
@@ -157,7 +166,7 @@ function _getSelectedOptions() {
 }
 
 function _addPeerToList(uuid) {
-  peerUuids[uuid] = uuid;
+  peerUuids.push(uuid);
 }
 
 let addAudio = LINKS.kify(_addAudio);

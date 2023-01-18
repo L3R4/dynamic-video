@@ -14,7 +14,7 @@ body {
 }
 
 .localName {
-  top: -8%;
+  top: -2%;
   left: 45%;
   position: absolute;
   font-family: fantasy;
@@ -32,12 +32,24 @@ body {
 #canvas {
   background-color: rgb(210,210,210);
   width: 90vw;
-  height: 90vh;
+  height: 60vh;
   position: absolute;
   left: 50vw;
-  top: 50vh;
+  top: 60vh;
   transform: translate(-50%, -50%);
   border: 5px solid #000;
+}
+
+#streamScroll {
+  background-color: rgb(210,210,210);
+  border: 3px solid #000;
+  width: 90vw;
+  height: 10vw;
+  position: absolute;
+  left: 50vw;
+  top: 17vh;
+  transform: translate(-50%, -50%);
+  overflow-x: scroll;
 }
 
 #joinBox {
@@ -108,6 +120,11 @@ body {
   position: absolute;
   left: 45%;
   top: 70%;
+}
+
+#printNames {
+  position: absolute;
+  bottom: 0px;
 }
 
 .videoContainer {

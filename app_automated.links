@@ -112,9 +112,9 @@ typename Room =
   );
 
 #parameters
-var halfWidth = 45.0;
-var halfHeight = 45.0;
-var charVelocity = 0.5;
+var halfWidth = 650.0;
+var halfHeight = 200.0;
+var charVelocity = 5.0;
 
 #default room to start with
 fun defaultRoom(clientPid) {
@@ -592,7 +592,7 @@ fun drawChar(c) {
   var y = c.y;
   var name = c.name;
   div (class ("character") +@
-    style ("left:" ^^ floatToString(x) ^^ "%;top:" ^^ floatToString(y) ^^ "%;position:absolute;" ^^
+    style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;" ^^
     "background-image: url(" ^^ c.imageURL ^^ ");background-position: center;"),
     p (class("charName"), textNode(name))
   )
@@ -720,19 +720,21 @@ fun joinedView(room) {
   var elem = getNodeById("localVideoDiv");
   domSetAttributeFromRef(elem, "class", "webcamMode");
   var name = room.charData.name;
-  div (id ("canvas"), ch([
-    p (class("localName"), textNode(name)),
-    drawChar(room.charData),
-    ch(listOfHTMLChars(room.others)),
-    input (
-      ca([
-        id ("printNames"),
-        type ("submit"),
-        value ("Print Users"),
-        printNamesHandler(room.others)
-      ]),
-      he)
-  ]))
+  ch([
+    h1 (class("localName"), textNode(name)),
+    div (id ("canvas"), ch([
+      drawChar(room.charData),
+      ch(listOfHTMLChars(room.others)),
+      input (
+        ca([
+          id ("printNames"),
+          type ("submit"),
+          value ("Print Users"),
+          printNamesHandler(room.others)
+        ]),
+        he)
+    ]))
+  ])
 }
 
 #main view function in MVU cycle, display different HTML bases on state of model
@@ -832,7 +834,7 @@ fun mainPage(serverPid) {
     </head>
     <body>
       <div id="placeholder"></div>
-      <div id="videos"></div>
+      <div id="streamScroll"></div>
     </body>
   </html>
 }
