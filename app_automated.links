@@ -305,7 +305,12 @@ fun moveChar(charData, directions) {
   } else {
     xDis1
   };
-  (charData with x = charData.x +. xDis2, y = charData.y +. yDis2)
+  var newX = charData.x +. xDis2;
+  var newY = charData.y +. yDis2;
+  if (newX >= 0.0 && newX <= 1200.0 && newY >= 0.0 && newY <= 400.0)
+    (charData with x = newX, y = newY)
+  else
+    charData
 }
 
 sig characterMoved : (CharacterData, CharacterData) ~> Bool
@@ -520,15 +525,50 @@ fun updt(msg, room) {
 
     #every frame, this is the case, updates room based on room
     case NewFrame ->
-      var newChar = moveChar(room.charData, room.directions);
-      var charMoved = characterMoved(room.charData, newChar);
-      if (charMoved) {
-        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
-        serverPid ! BroadcastMessage(charPos);
-        manageConnections(room.charData, room.others);
-        ((room with charData = newChar), MvuCommands.empty)
+      var modulo = clientTime() - (4 * (clientTime() / 4));
+      if (modulo == 0) {
+        var randNum = random();
+        print(floatToString(randNum));
+        var dirs = if (randNum >= 0.0 && randNum <= 10.0) {
+          (up = true, down = false, left = false, right = false)
+        } else if (randNum >= 10.0 && randNum <= 20.0) {
+          (up = true, down = false, left = false, right = true)
+        } else if (randNum >= 20.0 && randNum <= 30.0) {
+          (up = false, down = false, left = false, right = true)
+        } else if (randNum >= 30.0 && randNum <= 40.0) {
+          (up = false, down = true, left = false, right = true)
+        } else if (randNum >= 40.0 && randNum <= 50.0) {
+          (up = false, down = true, left = false, right = false)
+        } else if (randNum >= 50.0 && randNum <= 60.0) {
+          (up = false, down = true, left = true, right = false)
+        } else if (randNum >= 60.0 && randNum <= 70.0) {
+          (up = false, down = false, left = true, right = false)
+        } else if (randNum >= 70.0 && randNum <= 80.0) {
+          (up = true, down = false, left = true, right = false)
+        } else {
+          (up = false, down = false, left = false, right = false)
+        };
+        var newChar = moveChar(room.charData, dirs);
+        var charMoved = characterMoved(room.charData, newChar);
+        if (charMoved) {
+          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
+          serverPid ! BroadcastMessage(charPos);
+          manageConnections(room.charData, room.others);
+          ((room with charData = newChar), MvuCommands.empty)
+        } else {
+          (room, MvuCommands.empty)
+        }
       } else {
-        (room, MvuCommands.empty)
+        var newChar = moveChar(room.charData, room.directions);
+        var charMoved = characterMoved(room.charData, newChar);
+        if (charMoved) {
+          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
+          serverPid ! BroadcastMessage(charPos);
+          manageConnections(room.charData, room.others);
+          ((room with charData = newChar), MvuCommands.empty)
+        } else {
+          (room, MvuCommands.empty)
+        }
       }
     
     case MoveChar(dir) ->
