@@ -5,7 +5,7 @@ typename OfferOrAnswer = String;
 typename DeviceType = String;
 typename DeviceID = String;
 typename DeviceLabel = String;
-typename MessageType = [| ConnectionRequest | SDP | Ice |];
+typename MessageType = [| ConnectionRequest | SDP | Ice | Disconnect |];
 typename PCMessage = (id : ID, type : MessageType, sdp : String,
                       sdptype : OfferOrAnswer, iceCandidates : Candidates);
 
@@ -201,6 +201,9 @@ fun handleMessage(msg) {
       } else {
         ()
       }
+    case Disconnect ->
+      JSWebRTC.disconnectFromUser(peerID);
+      ()
   }
 }
 
@@ -302,7 +305,11 @@ fun connectToUser(peerID) {
 }
 
 fun disconnectFromUser(peerID) {
-  JSWebRTC.disconnectFromUser(peerID)
+  JSWebRTC.disconnectFromUser(peerID);
+  var localID = JSWebRTC.getLocalID();
+  var message = (id=localID, type=Disconnect, sdp="_", sdptype="_", iceCandidates="_");
+  serverPid ! Send(message, peerID);
+  ()
 }
 
 fun getID() {

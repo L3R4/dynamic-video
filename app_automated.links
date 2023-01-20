@@ -44,7 +44,6 @@ fun serverLoop(clients) server {
           serverLoop(newClients)
 
         case BroadcastMessage(msg) ->
-          print(intToString(length(clients)));
           broadcast(clients, Message(msg));
           serverLoop(clients)
     }
@@ -477,7 +476,7 @@ fun processServerMsg(serverMsg, room) {
           JSApp.displayLiveStream(newChar.id);
           (room with others = newPeerList)
         } else {
-          if (WebRTC.threeSecondsElapsed(newChar.id)) {
+          if (not(WebRTC.checkIfPCObjectExists(newChar.id))) {
             disconnectFromPeer(newChar);
             (room with others = newPeerList)
           } else {
@@ -636,11 +635,7 @@ fun listOfHTMLChars(cs) {
   switch(cs) {
     case []         -> []
     case charData::xs ->
-      var x = charData.x;
-      if (x <> 0.0)
-        drawChar(charData) :: listOfHTMLChars(xs)
-      else
-        listOfHTMLChars(xs)
+      drawChar(charData) :: listOfHTMLChars(xs)
   }
 }
 

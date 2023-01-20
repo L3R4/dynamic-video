@@ -112,8 +112,8 @@ typename Room =
   );
 
 #parameters
-var halfWidth = 560.0;
-var halfHeight = 315.0;
+var halfWidth = 650.0;
+var halfHeight = 200.0;
 var charVelocity = 5.0;
 
 #default room to start with
@@ -470,7 +470,7 @@ fun processServerMsg(serverMsg, room) {
           JSApp.displayLiveStream(newChar.id);
           (room with others = newPeerList)
         } else {
-          if (WebRTC.threeSecondsElapsed(newChar.id)) {
+          if (not(WebRTC.checkIfPCObjectExists(newChar.id))) {
             disconnectFromPeer(newChar);
             (room with others = newPeerList)
           } else {
@@ -604,11 +604,7 @@ fun listOfHTMLChars(cs) {
   switch(cs) {
     case []         -> []
     case charData::xs ->
-      var x = charData.x;
-      if (x <> 0.0)
-        drawChar(charData) :: listOfHTMLChars(xs)
-      else
-        listOfHTMLChars(xs)
+      drawChar(charData) :: listOfHTMLChars(xs)
   }
 }
 
@@ -720,19 +716,21 @@ fun joinedView(room) {
   var elem = getNodeById("localVideoDiv");
   domSetAttributeFromRef(elem, "class", "webcamMode");
   var name = room.charData.name;
-  div (id ("canvas"), ch([
-    p (class("localName"), textNode(name)),
-    drawChar(room.charData),
-    ch(listOfHTMLChars(room.others)),
-    input (
-      ca([
-        id ("printNames"),
-        type ("submit"),
-        value ("Print Users"),
-        printNamesHandler(room.others)
-      ]),
-      he)
-  ]))
+  ch([
+    h1 (class("localName"), textNode(name)),	
+    div (id ("canvas"), ch([	
+      drawChar(room.charData),	
+      ch(listOfHTMLChars(room.others)),	
+      input (	
+        ca([	
+          id ("printNames"),	
+          type ("submit"),	
+          value ("Print Users"),	
+          printNamesHandler(room.others)	
+        ]),	
+        he)	
+    ]))	
+  ])
 }
 
 #main view function in MVU cycle, display different HTML bases on state of model
@@ -832,7 +830,7 @@ fun mainPage(serverPid) {
     </head>
     <body>
       <div id="placeholder"></div>
-      <div id="videos"></div>
+      <div id="streamScroll"></div>
     </body>
   </html>
 }
