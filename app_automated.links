@@ -108,7 +108,8 @@ typename Room =
    cameraId : DeviceID, 
    micId : DeviceID, 
    others : [CharacterData],
-   pid : Process({hear : RequestMsg})
+   pid : Process({hear : RequestMsg}),
+   prevTimeChosen : Int
   );
 
 #parameters
@@ -142,7 +143,8 @@ fun defaultRoom(clientPid) {
    cameraId = "None", 
    micId = "None", 
    others = [],
-   pid = clientPid
+   pid = clientPid,
+   prevTimeChosen = clientTime()
   )
 }
 
@@ -522,28 +524,28 @@ fun processServerMsg(serverMsg, room) {
 sig updt : (Msg, Room) ~> (Room, MvuCommands.Command(Msg))
 fun updt(msg, room) {
   switch(msg) {
-
     #every frame, this is the case, updates room based on room
     case NewFrame ->
-      var modulo = clientTime() - (4 * (clientTime() / 4));
-      if (modulo == 0) {
+      var modulo = clientTime() - (2 * (clientTime() / 2));
+      var currentTime = clientTime();
+      if (modulo == 0 && currentTime - room.prevTimeChosen >= 2) {
         var randNum = random();
         print(floatToString(randNum));
-        var dirs = if (randNum >= 0.0 && randNum <= 10.0) {
+        var dirs = if (randNum >= 0.0 && randNum <= 0.1) {
           (up = true, down = false, left = false, right = false)
-        } else if (randNum >= 10.0 && randNum <= 20.0) {
+        } else if (randNum >= 0.1 && randNum <= 0.2) {
           (up = true, down = false, left = false, right = true)
-        } else if (randNum >= 20.0 && randNum <= 30.0) {
+        } else if (randNum >= 0.2 && randNum <= 0.3) {
           (up = false, down = false, left = false, right = true)
-        } else if (randNum >= 30.0 && randNum <= 40.0) {
+        } else if (randNum >= 0.3 && randNum <= 0.4) {
           (up = false, down = true, left = false, right = true)
-        } else if (randNum >= 40.0 && randNum <= 50.0) {
+        } else if (randNum >= 0.4 && randNum <= 0.5) {
           (up = false, down = true, left = false, right = false)
-        } else if (randNum >= 50.0 && randNum <= 60.0) {
+        } else if (randNum >= 0.5 && randNum <= 0.6) {
           (up = false, down = true, left = true, right = false)
-        } else if (randNum >= 60.0 && randNum <= 70.0) {
+        } else if (randNum >= 0.6 && randNum <= 0.7) {
           (up = false, down = false, left = true, right = false)
-        } else if (randNum >= 70.0 && randNum <= 80.0) {
+        } else if (randNum >= 0.7 && randNum <= 0.8) {
           (up = true, down = false, left = true, right = false)
         } else {
           (up = false, down = false, left = false, right = false)
@@ -554,9 +556,9 @@ fun updt(msg, room) {
           var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
           serverPid ! BroadcastMessage(charPos);
           manageConnections(room.charData, room.others);
-          ((room with charData = newChar), MvuCommands.empty)
+          ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
         } else {
-          (room, MvuCommands.empty)
+          ((room with directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
         }
       } else {
         var newChar = moveChar(room.charData, room.directions);
@@ -572,20 +574,10 @@ fun updt(msg, room) {
       }
     
     case MoveChar(dir) ->
-      if (room.state == "joined") {
-        var newDirections = setCharacterDirection(room.directions, dir);
-        ((room with directions = newDirections), MvuCommands.empty)
-      } else {
-        (room, MvuCommands.empty)
-      }
+      (room, MvuCommands.empty)
     
     case StopChar(dir) ->
-      if (room.state == "joined") {
-        var newDirections = unsetCharacterDirection(room.directions, dir);
-        ((room with directions = newDirections), MvuCommands.empty)
-      } else {
-        (room, MvuCommands.empty)
-      }
+      (room, MvuCommands.empty)
 
     #updates name field of room with the latest keyboard input
     case UpdateNameField(str) ->
@@ -815,7 +807,6 @@ fun drain(messages, pids) {
 fun clientLoop(msgs, pids) {
     receive {
       case Message(msg) ->
-        print("got message");
         var (msgs, pids) = drain(msgs ++ [msg], pids);
         clientLoop(msgs, pids)
       
