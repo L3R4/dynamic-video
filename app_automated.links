@@ -53,6 +53,10 @@ var serverPid = spawn { serverLoop([]) };
 
 typename DeviceID = String;
 
+typename Position = (Float, Float);
+
+typename AutomatedDirection = [| TowardsHub | TowardsBase |];
+
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
 
@@ -108,18 +112,48 @@ typename Room =
    micId : DeviceID, 
    others : [CharacterData],
    pid : Process({hear : RequestMsg}),
-   prevTimeChosen : Int
+   prevTimeChosen : Int,
+   localBase : Position,
+   currentTarget : Position,
+   targetType : AutomatedDirection
   );
 
 #parameters
 var halfWidth = 650.0;
 var halfHeight = 200.0;
-var charVelocity = 5.0;
+var charVelocity = 10.0;
+
+var xLim = 1200.0;
+var yLim = 400.0;
+
+var hub1 = (100.0, 200.0);
+var hub2 = (200.0, 200.0);
+var hub3 = (300.0, 200.0);
+var hub4 = (400.0, 200.0);
+
+fun randomHub() {
+  var randNum = random();
+  if (randNum >= 0.0 && randNum < 0.25) {
+    hub1
+  } else if (randNum >= 0.25 && randNum < 0.5) {
+    hub2
+  } else if (randNum >= 0.5 && randNum < 0.75) {
+    hub3
+  } else {
+    hub4
+  }
+}
 
 #default room to start with
 fun defaultRoom(clientPid) {
   var localID = WebRTC.getID();
   var localName = JSApp.getName(localID);
+  var chosenHub = randomHub();
+  var localBasePos = if (localID >= 1 && localID <= 5) {
+    (100.0 *. localID, 0.0)
+  } else {
+    (100.0 *. localID, 400.0)
+  }
   JSApp.takePicture();
   var pictureURL = JSApp.getPictureURL();
   var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, x = halfWidth, y = halfHeight);
@@ -143,7 +177,10 @@ fun defaultRoom(clientPid) {
    micId = "None", 
    others = [],
    pid = clientPid,
-   prevTimeChosen = clientTime()
+   prevTimeChosen = clientTime(),
+   localBase = localBasePos,
+   currentTarget = chosenHub,
+   targetType = TowardsHub
   )
 }
 
@@ -220,6 +257,11 @@ fun mediaClickHandler() {
     var micId = hd(tl(deviceIds));
     MediaChosen(camId, micId)
   })
+}
+
+sig euclideanDistance : (Position, Position) ~> Float
+fun euclideanDistance((x1, y1), (x2, y2)) {
+  sqrt((x1 -. x2)^.2.0 +. (y1 -. y2)^.2.0)
 }
 
 fun isCharInList(c, lst) {
@@ -308,10 +350,36 @@ fun moveChar(charData, directions) {
   };
   var newX = charData.x +. xDis2;
   var newY = charData.y +. yDis2;
-  if (newX >= 0.0 && newX <= 1200.0 && newY >= 0.0 && newY <= 400.0)
+  if (newX >= 0.0 && newX <= xLim && newY >= 0.0 && newY <= yLim)
     (charData with x = newX, y = newY)
   else
     charData
+}
+
+sig determineDirections : (Position, Position) ~> DirectionRecord
+fun determineDirections(currentPos, targetPos) {
+  var resultingVector = (first(targetPos) -. first(currentPos), second(targetPos) -. second(currentPos));
+  var xVal = first(resultingVector);
+  var yVal = second(resultingVector);
+  if (xVal == 0.0 && yVal > 0.0) {
+    (up = true, down = false, left = false, right = false)
+  } else if (xVal > 0.0 && yVal > 0.0) {
+    (up = true, down = false, left = false, right = true)
+  } else if (xVal > 0.0 && yVal == 0.0) {
+    (up = false, down = false, left = false, right = true)
+  } else if (xVal > 0.0 && yVal < 0.0) {
+    (up = false, down = true, left = false, right = true)
+  } else if (xVal == 0.0 && yVal < 0.0) {
+    (up = false, down = true, left = false, right = false)
+  } else if (xVal < 0.0 && yVal < 0.0) {
+    (up = false, down = true, left = true, right = false)
+  } else if (xVal < 0.0 && yVal == 0.0) {
+    (up = false, down = false, left = true, right = false)
+  } else if (xVal < 0.0 && yVal > 0.0) {
+    (up = true, down = false, left = true, right = false)
+  } else {
+    (up = false, down = false, left = false, right = false)
+  }
 }
 
 sig characterMoved : (CharacterData, CharacterData) ~> Bool
@@ -353,10 +421,8 @@ fun getCharWithId(id, chars) {
 }
 
 fun isCloseToPeer(localChar, peerChar) {
-  var distance = sqrt((peerChar.x -. localChar.x)^.2.0 +. 
-                      (peerChar.y -. localChar.y)^.2.0
-                     );
-  if (distance <= 150.0)
+  var distance = euclideanDistance((localChar.x, localChar.y), (peerChar.x, peerChar.y));
+  if (distance <= 75.0)
     true
   else
     false
@@ -525,48 +591,35 @@ fun updt(msg, room) {
   switch(msg) {
     #every frame, this is the case, updates room based on room
     case NewFrame ->
-      var modulo = clientTime() - (2 * (clientTime() / 2));
       var currentTime = clientTime();
-      if (modulo == 0 && currentTime - room.prevTimeChosen >= 2) {
-        var randNum = random();
-        print(floatToString(randNum));
-        var dirs = if (randNum >= 0.0 && randNum <= 0.1) {
-          (up = true, down = false, left = false, right = false)
-        } else if (randNum >= 0.1 && randNum <= 0.2) {
-          (up = true, down = false, left = false, right = true)
-        } else if (randNum >= 0.2 && randNum <= 0.3) {
-          (up = false, down = false, left = false, right = true)
-        } else if (randNum >= 0.3 && randNum <= 0.4) {
-          (up = false, down = true, left = false, right = true)
-        } else if (randNum >= 0.4 && randNum <= 0.5) {
-          (up = false, down = true, left = false, right = false)
-        } else if (randNum >= 0.5 && randNum <= 0.6) {
-          (up = false, down = true, left = true, right = false)
-        } else if (randNum >= 0.6 && randNum <= 0.7) {
-          (up = false, down = false, left = true, right = false)
-        } else if (randNum >= 0.7 && randNum <= 0.8) {
-          (up = true, down = false, left = true, right = false)
-        } else {
-          (up = false, down = false, left = false, right = false)
-        };
+      var modulo10 = currentTime - (10 * (currentTime / 10));
+      var modulo5 = currentTime - (5 * (currentTime / 5));
+      if (modulo10 == 0 && currentTime <> room.prevTimeChosen) {
+        var dirs = (up = false, down = false, left = false, right = false);
+        ((room with directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
+      } else if (modulo5 == 0 && currentTime <> room.prevTimeChosen) {
+        var chosenHub = randomHub();
+        var dirs = determineDirections((room.charData.x, room.charData.y), (first(chosenHub), second(chosenHub)));
         var newChar = moveChar(room.charData, dirs);
-        var charMoved = characterMoved(room.charData, newChar);
-        if (charMoved) {
-          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
-          serverPid ! BroadcastMessage(charPos);
-          manageConnections(room.charData, room.others);
-          ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
-        } else {
-          ((room with directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
-        }
+        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
+        serverPid ! BroadcastMessage(charPos);
+        manageConnections(room.charData, room.others);
+        ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = chosenHub), MvuCommands.empty)
       } else {
         var newChar = moveChar(room.charData, room.directions);
+        var distanceToTarg = euclideanDistance((newChar.x, newChar.y), room.currentTarget);
         var charMoved = characterMoved(room.charData, newChar);
-        if (charMoved) {
+        if (charMoved && distanceToTarg > 20.0) {
           var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
           serverPid ! BroadcastMessage(charPos);
           manageConnections(room.charData, room.others);
           ((room with charData = newChar), MvuCommands.empty)
+        } else if (charMoved && distanceToTarg <= 20.0) {
+          var newDirs = (up = false, down = false, left = false, right = false);
+          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
+          serverPid ! BroadcastMessage(charPos);
+          manageConnections(room.charData, room.others);
+          ((room with charData = newChar, directions = newDirs), MvuCommands.empty)
         } else {
           (room, MvuCommands.empty)
         }
