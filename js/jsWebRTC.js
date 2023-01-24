@@ -118,7 +118,13 @@ function _setAudioOnly() {
   audioTrackOnly = true;
 }
 
-function _setUpPC(peerUuid) {
+function _setUpPC(peerUuid, connectionID) {
+  let connID;
+  if (connectionID != "_") {
+    connID = connectionID;
+  } else {
+    connID = getUniqueID();
+  }
   peerConnections[peerUuid] = {'pc': new RTCPeerConnection(peerConnectionConfig),
                               'iceCandidates': [],
                               'localDescSet': false,
@@ -126,7 +132,8 @@ function _setUpPC(peerUuid) {
                               'streamAdded': false,
                               'videoTrack': null,
                               'audioTrack': null,
-                              'timeCreated': Date.now()
+                              'timeCreated': Date.now(),
+                              'connectionID': connID
                             };
   peerConnections[peerUuid].pc.onicecandidate = event => {
     if (peerConnections[peerUuid] && event.candidate != null) {
@@ -143,6 +150,12 @@ function _setUpPC(peerUuid) {
     peerConnections[peerUuid].pc.addTrack(localVideoTrack);
   }
   peerConnections[peerUuid].pc.addTrack(localAudioTrack);
+}
+
+function _updateConnectionID(peerID, connID) {
+  if (peerConnections[peerID]) {
+    peerConnections[peerID].connectionID = connID;
+  }
 }
 
 function _connectionInitiatedWithPeer(peerUuid) {
@@ -302,6 +315,14 @@ function _addCandidates(candidates, peerUuid) {
   }
 }
 
+function _getConnectionID(peerID) {
+  if (peerConnections[peerID]) {
+    return peerConnections[peerID].connectionID;
+  } else {
+    return "";
+  }
+}
+
 function getUniqueID() {
   function s4() {
     return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
@@ -338,6 +359,7 @@ let setAudioOnly = LINKS.kify(_setAudioOnly);
 let setLocalID = LINKS.kify(_setLocalID);
 let getLocalID = LINKS.kify(_getLocalID);
 let setUpPC = LINKS.kify(_setUpPC);
+let updateConnectionID = LINKS.kify(_updateConnectionID);
 let connectionInitiatedWithPeer = LINKS.kify(_connectionInitiatedWithPeer);
 let setLocalDescForPC = LINKS.kify(_setLocalDescForPC);
 let checkIfLocalDescSetForPC = LINKS.kify(_checkIfLocalDescSetForPC);
@@ -352,3 +374,4 @@ let setBegunIceSearch = LINKS.kify(_setBegunIceSearch);
 let disconnectFromUser = LINKS.kify(_disconnectFromUser);
 let collectCandidates = LINKS.kify(_collectCandidates);
 let addCandidates = LINKS.kify(_addCandidates);
+let getConnectionID = LINKS.kify(_getConnectionID);

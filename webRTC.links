@@ -1,11 +1,12 @@
 typename ID = Int;
+typename ConnectionID = String;
 typename Desc = String;
 typename Candidates = String;
 typename OfferOrAnswer = String;
 typename DeviceType = String;
 typename DeviceID = String;
 typename DeviceLabel = String;
-typename MessageType = [| ConnectionRequest | SDP | Ice | Disconnect |];
+typename MessageType = [| ConnectionRequest : ConnectionID | SDP : ConnectionID | Ice | Disconnect : ConnectionID |];
 typename PCMessage = (id : ID, type : MessageType, sdp : String,
                       sdptype : OfferOrAnswer, iceCandidates : Candidates);
 
@@ -23,7 +24,8 @@ module JSWebRTC {
         setAudioOnly : () ~> ();
         setLocalID : (Int) ~> ();
         getLocalID : () ~> ID;
-        setUpPC : (ID) ~> ();
+        setUpPC : (ID, ConnectionID) ~> ();
+        updateConnectionID : (ID, ConnectionID) ~> ();
         addStreamToPC : (ID) ~> ();
         connectionInitiatedWithPeer : (ID) ~> Bool;
         setLocalDescForPC : (ID, OfferOrAnswer) ~> ();
@@ -39,6 +41,7 @@ module JSWebRTC {
         disconnectFromUser : (ID) ~> ();
         collectCandidates : () ~> (Candidates);
         addCandidates : (Candidates, ID) ~> ();
+        getConnectionID : (ID) ~> ConnectionID;
     }
 }
 
@@ -129,7 +132,8 @@ fun sendDescriptionForPC(peerID, sdpType) {
   if (checkIfPCObjectExists(peerID)) {
     var desc = JSWebRTC.getLocalDescForPC(peerID);
     var localID = JSWebRTC.getLocalID();
-    var message = (id=localID, type=SDP, sdp=desc, sdptype=sdpType, iceCandidates="_");
+    var connectionID = JSWebRTC.getConnectionID(peerID);
+    var message = (id=localID, type=SDP(connectionID), sdp=desc, sdptype=sdpType, iceCandidates="_");
     serverPid ! Send(message, peerID);
     ()
   } else {
@@ -146,8 +150,8 @@ fun prepareDescriptionForPC(peerID, sdpType) {
   }
 }
 
-fun setUpNewPeer(peerID, sendOffer) {
-  JSWebRTC.setUpPC(peerID);
+fun setUpNewPeer(peerID, connectionID, sendOffer) {
+  JSWebRTC.setUpPC(peerID, connectionID);
   if (checkIfPCObjectExists(peerID) && sendOffer) {
     prepareDescriptionForPC(peerID, "offer");
     sendDescriptionForPC(peerID, "offer")
@@ -171,9 +175,9 @@ fun handleMessage(msg) {
   var localID = JSWebRTC.getLocalID();
   var peerID = msg.id;
   switch (msg.type) {
-    case ConnectionRequest ->
+    case ConnectionRequest(connectionID) ->
       if (not(checkIfPCObjectExists(peerID))) {
-        setUpNewPeer(peerID, true);
+        setUpNewPeer(peerID, connectionID, true);
         var begunIceSearch = JSWebRTC.getBegunIceSearch();
         if (begunIceSearch == false) {
           var iceId2 = spawnClient { handleIceCandidates() };
@@ -182,28 +186,37 @@ fun handleMessage(msg) {
           ()
         }
       } else if (localID > peerID) {
+        JSWebRTC.updateConnectionID(peerID, connectionID);
         prepareDescriptionForPC(peerID, "offer");
         sendDescriptionForPC(peerID, "offer");
         ()
       } else {
         ()
       }
-    case SDP ->
-      if (msg.sdptype == "offer") {
-        handleOfferForPC(peerID, msg.sdp)
-      } else {
-        JSWebRTC.setRemoteDescForPC(peerID, msg.sdp);
-        waitUntilRemoteDescSetForPC(peerID)
-      }
-    case Ice ->
-      if (peerID <> localID) {
-        JSWebRTC.addCandidates(msg.iceCandidates, peerID)
+    case SDP(connectionID) ->
+      var currentConnID = JSWebRTC.getConnectionID(peerID);
+      if (connectionID == currentConnID) {
+        if (msg.sdptype == "offer") {
+          handleOfferForPC(peerID, msg.sdp)
+        } else {
+          JSWebRTC.setRemoteDescForPC(peerID, msg.sdp);
+          waitUntilRemoteDescSetForPC(peerID)
+        }
       } else {
         ()
       }
-    case Disconnect ->
-      JSWebRTC.disconnectFromUser(peerID);
-      ()
+    case Ice ->
+      if (peerID <> localID)
+        JSWebRTC.addCandidates(msg.iceCandidates, peerID)
+      else
+        ()
+      
+    case Disconnect(connectionID) ->
+      var currentConnID = JSWebRTC.getConnectionID(peerID);
+      if (connectionID == currentConnID)
+        JSWebRTC.disconnectFromUser(peerID)
+      else
+        ()
   }
 }
 
@@ -285,17 +298,18 @@ fun clientRegister() {
 
 fun connectToUser(peerID) {
   if (not(checkIfConnectedToPeer(peerID))) {
-    setUpNewPeer(peerID, false);
+    setUpNewPeer(peerID, "_", false);
+    var connectionID = JSWebRTC.getConnectionID(peerID);
     var localID = JSWebRTC.getLocalID();
     var begunIceSearch = JSWebRTC.getBegunIceSearch();
     if (begunIceSearch == false) {
       JSWebRTC.setBegunIceSearch();
       var iceId = spawnClient { handleIceCandidates() };
-      var message = (id=localID, type=ConnectionRequest, sdp="_", sdptype="_", iceCandidates="_");
+      var message = (id=localID, type=ConnectionRequest(connectionID), sdp="_", sdptype="_", iceCandidates="_");
       serverPid ! Send(message, peerID);
       ()
     } else {
-      var message = (id=localID, type=ConnectionRequest, sdp="_", sdptype="_", iceCandidates="_");
+      var message = (id=localID, type=ConnectionRequest(connectionID), sdp="_", sdptype="_", iceCandidates="_");
       serverPid ! Send(message, peerID);
       ()
     }
@@ -305,11 +319,16 @@ fun connectToUser(peerID) {
 }
 
 fun disconnectFromUser(peerID) {
-  JSWebRTC.disconnectFromUser(peerID);
-  var localID = JSWebRTC.getLocalID();
-  var message = (id=localID, type=Disconnect, sdp="_", sdptype="_", iceCandidates="_");
-  serverPid ! Send(message, peerID);
-  ()
+  if (JSWebRTC.checkIfPCObjectExists(peerID)) {
+    var connectionID = JSWebRTC.getConnectionID(peerID);
+    JSWebRTC.disconnectFromUser(peerID);
+    var localID = JSWebRTC.getLocalID();
+    var message = (id=localID, type=Disconnect(connectionID), sdp="_", sdptype="_", iceCandidates="_");
+    serverPid ! Send(message, peerID);
+    ()
+  } else {
+    ()
+  }
 }
 
 fun getID() {
