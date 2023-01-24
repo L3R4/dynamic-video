@@ -55,8 +55,6 @@ typename DeviceID = String;
 
 typename Position = (Float, Float);
 
-typename AutomatedDirection = [| TowardsHub | TowardsBase |];
-
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
 
@@ -114,14 +112,13 @@ typename Room =
    pid : Process({hear : RequestMsg}),
    prevTimeChosen : Int,
    localBase : Position,
-   currentTarget : Position,
-   targetType : AutomatedDirection
+   currentTarget : Position
   );
 
 #parameters
 var halfWidth = 650.0;
 var halfHeight = 200.0;
-var charVelocity = 10.0;
+var charVelocity = 5.0;
 
 var xLim = 1200.0;
 var yLim = 400.0;
@@ -150,10 +147,10 @@ fun defaultRoom(clientPid) {
   var localName = JSApp.getName(localID);
   var chosenHub = randomHub();
   var localBasePos = if (localID >= 1 && localID <= 5) {
-    (100.0 *. localID, 0.0)
+    (100.0 *. intToFloat(localID), 0.0)
   } else {
-    (100.0 *. localID, 400.0)
-  }
+    (100.0 *. intToFloat(localID), 400.0)
+  };
   JSApp.takePicture();
   var pictureURL = JSApp.getPictureURL();
   var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, x = halfWidth, y = halfHeight);
@@ -179,8 +176,7 @@ fun defaultRoom(clientPid) {
    pid = clientPid,
    prevTimeChosen = clientTime(),
    localBase = localBasePos,
-   currentTarget = chosenHub,
-   targetType = TowardsHub
+   currentTarget = hub2
   )
 }
 
@@ -358,28 +354,56 @@ fun moveChar(charData, directions) {
 
 sig determineDirections : (Position, Position) ~> DirectionRecord
 fun determineDirections(currentPos, targetPos) {
-  var resultingVector = (first(targetPos) -. first(currentPos), second(targetPos) -. second(currentPos));
-  var xVal = first(resultingVector);
-  var yVal = second(resultingVector);
-  if (xVal == 0.0 && yVal > 0.0) {
+  var directionVector = (first(targetPos) -. first(currentPos), second(targetPos) -. second(currentPos));
+  var xVal = first(directionVector);
+  var yVal = second(directionVector);
+  var xAbs = sqrt(xVal *. xVal);
+  var yAbs = sqrt(yVal *. yVal);
+  if (xAbs <= 10.0 && yVal > 0.0) {
+    (up = false, down = true, left = false, right = false)
+  } else if (xAbs <= 10.0 && yVal < 0.0) {
     (up = true, down = false, left = false, right = false)
-  } else if (xVal > 0.0 && yVal > 0.0) {
-    (up = true, down = false, left = false, right = true)
-  } else if (xVal > 0.0 && yVal == 0.0) {
+  } else if (xVal > 0.0 && yAbs <= 10.0) {
     (up = false, down = false, left = false, right = true)
+  } else if (xVal < 0.0 && yAbs <= 10.0) {
+    (up = false, down = false, left = true, right = false)
+  } else if (xVal > 0.0 && yVal > 0.0) {
+    (up = false, down = true, left = false, right = true)
   } else if (xVal > 0.0 && yVal < 0.0) {
     (up = false, down = true, left = false, right = true)
-  } else if (xVal == 0.0 && yVal < 0.0) {
-    (up = false, down = true, left = false, right = false)
   } else if (xVal < 0.0 && yVal < 0.0) {
-    (up = false, down = true, left = true, right = false)
-  } else if (xVal < 0.0 && yVal == 0.0) {
-    (up = false, down = false, left = true, right = false)
-  } else if (xVal < 0.0 && yVal > 0.0) {
     (up = true, down = false, left = true, right = false)
+  } else if (xVal < 0.0 && yVal > 0.0) {
+    (up = false, down = true, left = true, right = false)
   } else {
     (up = false, down = false, left = false, right = false)
   }
+}
+
+fun printDirections(directions) {
+  var str1 = "(";
+  var str2 = if (directions.up) {
+    str1 ^^ "up, "
+  } else {
+    str1
+  };
+  var str3 = if (directions.right) {
+    str2 ^^ "right, "
+  } else {
+    str2
+  };
+  var str4 = if (directions.down) {
+    str3 ^^ "down, "
+  } else {
+    str3
+  };
+  var str5 = if (directions.left) {
+    str4 ^^ "left, "
+  } else {
+    str4
+  };
+  print(str5 ^^ ")");
+  ()
 }
 
 sig characterMoved : (CharacterData, CharacterData) ~> Bool
@@ -592,29 +616,50 @@ fun updt(msg, room) {
     #every frame, this is the case, updates room based on room
     case NewFrame ->
       var currentTime = clientTime();
-      var modulo10 = currentTime - (10 * (currentTime / 10));
-      var modulo5 = currentTime - (5 * (currentTime / 5));
-      if (modulo10 == 0 && currentTime <> room.prevTimeChosen) {
-        var dirs = (up = false, down = false, left = false, right = false);
-        ((room with directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
-      } else if (modulo5 == 0 && currentTime <> room.prevTimeChosen) {
-        var chosenHub = randomHub();
-        var dirs = determineDirections((room.charData.x, room.charData.y), (first(chosenHub), second(chosenHub)));
+      var timeMod8 = currentTime - (8 * (currentTime / 8));
+      var timeMod4 = currentTime - (4 * (currentTime / 4));
+      var timeMod2 = currentTime - (2 * (currentTime / 2));
+      if (timeMod8 == 0 && currentTime <> room.prevTimeChosen) {
+        print("moving to hub");
+        #var chosenHub = randomHub();
+        var chosenHub = hub2;
+        print("hub position");
+        print(floatToString(first(chosenHub)) ^^ ", " ^^ floatToString(second(chosenHub)));
+        print(floatToString(room.charData.x) ^^ ", " ^^ floatToString(room.charData.y));
+        var dirs = determineDirections((room.charData.x, room.charData.y), chosenHub);
+        printDirections(dirs);
         var newChar = moveChar(room.charData, dirs);
         var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
         serverPid ! BroadcastMessage(charPos);
         manageConnections(room.charData, room.others);
         ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = chosenHub), MvuCommands.empty)
+      } else if (timeMod4 == 0 && currentTime <> room.prevTimeChosen) {
+        print("moving to base");
+        print("base position");
+        print(floatToString(first(room.localBase)) ^^ ", " ^^ floatToString(second(room.localBase)));
+        print(floatToString(room.charData.x) ^^ ", " ^^ floatToString(room.charData.y));
+        var dirs = determineDirections((room.charData.x, room.charData.y), room.localBase);
+        printDirections(dirs);
+        var newChar = moveChar(room.charData, dirs);
+        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
+        serverPid ! BroadcastMessage(charPos);
+        manageConnections(room.charData, room.others);
+        ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = room.localBase), MvuCommands.empty)
+      } else if (timeMod2 == 0 && currentTime <> room.prevTimeChosen) {
+        print("stand still");
+        var dirs = (up = false, down = false, left = false, right = false);
+        ((room with directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
       } else {
         var newChar = moveChar(room.charData, room.directions);
         var distanceToTarg = euclideanDistance((newChar.x, newChar.y), room.currentTarget);
         var charMoved = characterMoved(room.charData, newChar);
-        if (charMoved && distanceToTarg > 20.0) {
+        if (charMoved && distanceToTarg > 10.0) {
+          var newDirs = determineDirections((room.charData.x, room.charData.y), room.currentTarget);
           var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
           serverPid ! BroadcastMessage(charPos);
           manageConnections(room.charData, room.others);
-          ((room with charData = newChar), MvuCommands.empty)
-        } else if (charMoved && distanceToTarg <= 20.0) {
+          ((room with charData = newChar, directions = newDirs), MvuCommands.empty)
+        } else if (charMoved && distanceToTarg <= 10.0) {
           var newDirs = (up = false, down = false, left = false, right = false);
           var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
           serverPid ! BroadcastMessage(charPos);
