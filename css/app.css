@@ -135,7 +135,6 @@ body {
 .webcam {
   border: 1px solid #000;
   border-radius: 10%;
-  transform: scale(10) translate(50%, 50%);
 }
 
 .cameraMode {
