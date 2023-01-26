@@ -73,7 +73,7 @@ function _getCameraReady(camId) {
     video: {
       width: {max: 200},
       height: {max: 150},
-      frameRate: {max: 10},
+      frameRate: {max: 3},
       deviceId: camId
     },
     audio: false
