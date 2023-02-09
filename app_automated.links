@@ -89,7 +89,9 @@ typename CharacterData =
   (id: ID, 
    name: String,
    x : Float, 
-   y: Float, 
+   y: Float,
+   px : Float,
+   py : Float,
    imageURL : String
   );
 
@@ -159,7 +161,9 @@ fun defaultRoom(clientPid) {
     (id = localID, 
      name = localName, 
      x = halfWidth, 
-     y = halfHeight, 
+     y = halfHeight,
+     px = halfWidth,
+     py = halfHeight,
      imageURL = pictureURL
     ),
    directions =
@@ -347,7 +351,7 @@ fun moveChar(charData, directions) {
   var newX = charData.x +. xDis2;
   var newY = charData.y +. yDis2;
   if (newX >= 0.0 && newX <= xLim && newY >= 0.0 && newY <= yLim)
-    (charData with x = newX, y = newY)
+    (charData with x = newX, y = newY, px = charData.x, py = charData.y)
   else
     charData
 }
@@ -452,6 +456,15 @@ fun isCloseToPeer(localChar, peerChar) {
     false
 }
 
+fun isMovingTowardsPeer(localChar, peerChar) {
+  var currentDistance = euclideanDistance((localChar.x, localChar.y), (peerChar.x, peerChar.y));
+  var prevDistance = euclideanDistance((localChar.px, localChar.py), (peerChar.x, peerChar.y));
+  if (currentDistance <= prevDistance)
+    true
+  else
+    false
+}
+
 fun confirmConnection(localChar, peerChar) {
   if (WebRTC.checkIfConnectedToPeer(peerChar.id)) {
     JSApp.displayLiveStream(peerChar.id)
@@ -465,7 +478,7 @@ fun confirmConnection(localChar, peerChar) {
 }
 
 fun connectToPeer(localChar, peerChar) {
-  print("Calling connectToUser");
+  print("Calling connectToUser to " ^^ intToString(peerChar.id));
   WebRTC.connectToUser(peerChar.id);
   confirmConnection(localChar, peerChar)
 }
@@ -474,7 +487,7 @@ fun connectToPeers(charData, peerChars) {
   switch(peerChars) {
     case [] -> ()
     case x::xs ->
-      if (WebRTC.checkIfPCObjectExists(x.id) == false) {
+      if (not(WebRTC.checkIfPCObjectExists(x.id))) {
         var connId = spawnClient { connectToPeer(charData, x) };
         connectToPeers(charData, xs)
       } else {
@@ -488,17 +501,15 @@ fun disconnectFromPeer(peerChar) {
   JSApp.removePeerVideoDiv(peerChar.id)
 }
 
-fun disconnectFromPeers(peerChars) {
+fun disconnectFromPeers(charData, peerChars) {
   switch(peerChars) {
     case [] -> ()
     case x::xs ->
-    if (WebRTC.checkIfConnectedToPeer(x.id) || 
-        WebRTC.checkIfPCObjectExists(x.id)
-        ) {
+    if (WebRTC.checkIfConnectedToPeer(x.id) && not(isMovingTowardsPeer(charData, x))) {
       disconnectFromPeer(x);
-      disconnectFromPeers(xs)
+      disconnectFromPeers(charData, xs)
     } else {
-      disconnectFromPeers(xs)
+      disconnectFromPeers(charData, xs)
     }
   }
 }
@@ -531,7 +542,7 @@ fun manageConnections(charData, peerChars) {
   var closePeers = getClosePeers(charData, peerChars);
   var farPeers = getFarPeers(peerChars, closePeers);
   connectToPeers(charData, closePeers);
-  disconnectFromPeers(farPeers);
+  disconnectFromPeers(charData, farPeers);
   ()
 }
 
@@ -567,7 +578,7 @@ fun processServerMsg(serverMsg, room) {
           (room with others = newPeerList)
         } else {
           if (not(WebRTC.checkIfPCObjectExists(newChar.id))) {
-            disconnectFromPeer(newChar);
+            JSApp.removePeerVideoDiv(newChar.id);
             (room with others = newPeerList)
           } else {
             (room with others = newPeerList)
@@ -577,17 +588,17 @@ fun processServerMsg(serverMsg, room) {
         room
       }
     case CharacterIcon(info) ->
-      print("Got icon:");
-      print(info.name);
       if (info.id <> room.charData.id && 
           room.state == "joined" && 
           not(charWithIdExists(info.id, room.others))
           ) {
         var charData = 
-          (id = info.id, 
-           name = info.name, 
-           x = info.x, 
-           y = info.y, 
+          (id = info.id,
+           name = info.name,
+           x = info.x,
+           y = info.y,
+           px = 0.0,
+           py = 0.0,
            imageURL = info.imageURL
           );
         var appendToOthers = charData :: room.others;
@@ -620,33 +631,23 @@ fun updt(msg, room) {
       var timeMod4 = currentTime - (4 * (currentTime / 4));
       var timeMod2 = currentTime - (2 * (currentTime / 2));
       if (timeMod8 == 0 && currentTime <> room.prevTimeChosen) {
-        print("moving to hub");
+        print("Moving to hub");
         #var chosenHub = randomHub();
         var chosenHub = hub2;
-        print("hub position");
-        print(floatToString(first(chosenHub)) ^^ ", " ^^ floatToString(second(chosenHub)));
-        print(floatToString(room.charData.x) ^^ ", " ^^ floatToString(room.charData.y));
         var dirs = determineDirections((room.charData.x, room.charData.y), chosenHub);
-        printDirections(dirs);
         var newChar = moveChar(room.charData, dirs);
         var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
         serverPid ! BroadcastMessage(charPos);
         manageConnections(room.charData, room.others);
         ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = chosenHub), MvuCommands.empty)
       } else if (timeMod4 == 0 && currentTime <> room.prevTimeChosen) {
-        print("moving to base");
-        print("base position");
-        print(floatToString(first(room.localBase)) ^^ ", " ^^ floatToString(second(room.localBase)));
-        print(floatToString(room.charData.x) ^^ ", " ^^ floatToString(room.charData.y));
         var dirs = determineDirections((room.charData.x, room.charData.y), room.localBase);
-        printDirections(dirs);
         var newChar = moveChar(room.charData, dirs);
         var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
         serverPid ! BroadcastMessage(charPos);
         manageConnections(room.charData, room.others);
         ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = room.localBase), MvuCommands.empty)
       } else if (timeMod2 == 0 && currentTime <> room.prevTimeChosen) {
-        print("stand still");
         var dirs = (up = false, down = false, left = false, right = false);
         ((room with directions = dirs, prevTimeChosen = currentTime), MvuCommands.empty)
       } else {

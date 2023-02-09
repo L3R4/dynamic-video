@@ -78,9 +78,15 @@ function _addAudio(id) {
 }
 
 function _displayLiveStream(id) {
+  console.log("Displaying stream of " + id);
   if (id == 0 && !!document.getElementById('localVideoTemp') && !document.getElementById('localVideoDiv')) {
     appendVidToDiv('localVideo', true);
-  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !document.getElementById('remoteVideo_' + id + 'Div')){
+  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !document.getElementById('remoteVideo_' + id + 'Div')) {
+    _addPeerToList(id);
+    appendVidToDiv('remoteVideo_' + id, false);
+    console.log("Displayed " + id);
+  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !!document.getElementById('remoteVideo_' + id + 'Div')) {
+    _removePeerVideoDiv(id);
     _addPeerToList(id);
     appendVidToDiv('remoteVideo_' + id, false);
   }

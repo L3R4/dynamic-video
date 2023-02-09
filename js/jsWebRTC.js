@@ -260,12 +260,12 @@ function _checkIfPCObjectExists(peerUuid) {
   return !!peerConnections[peerUuid];
 }
 
-function _threeSecondsElapsed(id) {
+function _oneSecondElapsed(id) {
   if (!peerConnections[id]) return false;
   const timeCreated = peerConnections[id].timeCreated;
   const currentTime = Date.now();
   const timeElapsed = currentTime - timeCreated;
-  return timeElapsed >= 3000;
+  return timeElapsed >= 1000;
 }
 
 function _getBegunIceSearch() {
@@ -319,7 +319,7 @@ function _getConnectionID(peerID) {
   if (peerConnections[peerID]) {
     return peerConnections[peerID].connectionID;
   } else {
-    return "";
+    return "No PC object";
   }
 }
 
@@ -368,7 +368,7 @@ let setRemoteDescForPC = LINKS.kify(_setRemoteDescForPC);
 let checkIfRemoteDescSetForPC = LINKS.kify(_checkIfRemoteDescSetForPC);
 let checkIfConnectedToPeer = LINKS.kify(_checkIfConnectedToPeer);
 let checkIfPCObjectExists= LINKS.kify(_checkIfPCObjectExists);
-let threeSecondsElapsed = LINKS.kify(_threeSecondsElapsed);
+let oneSecondsElapsed = LINKS.kify(_oneSecondElapsed);
 let getBegunIceSearch = LINKS.kify(_getBegunIceSearch);
 let setBegunIceSearch = LINKS.kify(_setBegunIceSearch);
 let disconnectFromUser = LINKS.kify(_disconnectFromUser);
