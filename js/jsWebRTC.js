@@ -1,6 +1,7 @@
-let peerConnections = {};
+const peerConnections = {};
+const disconnectTimes = {};
 
-let peerConnectionConfig = {
+const peerConnectionConfig = {
   'iceServers': [
     { 'urls': 'stun:stun.stunprotocol.org:3478' },
     { 'urls': 'stun:stun.l.google.com:19302' },
@@ -132,7 +133,7 @@ function _setUpPC(peerUuid, connectionID) {
                               'streamAdded': false,
                               'videoTrack': null,
                               'audioTrack': null,
-                              'timeCreated': Date.now(),
+                              'timeConnected': Date.now() + 100000,
                               'connectionID': connID
                             };
   peerConnections[peerUuid].pc.onicecandidate = event => {
@@ -241,8 +242,11 @@ function gotRemoteTrack(event, peerUuid) {
 
 function checkPeerStateChange(event, peerUuid) {
   if (peerConnections[peerUuid]) {
-    let state = peerConnections[peerUuid].pc.iceConnectionState;
+    const state = peerConnections[peerUuid].pc.iceConnectionState;
     console.log(`connection with peer, ${peerUuid} ${state}`);
+    if (state == "connected") {
+      peerConnections[peerUuid].timeConnected = Date.now();
+    }
     if (state == "failed" || state == "closed" || state == "disconnected") {
       delete peerConnections[peerUuid];
     }
@@ -262,9 +266,9 @@ function _checkIfPCObjectExists(peerUuid) {
 
 function _oneSecondElapsed(id) {
   if (!peerConnections[id]) return false;
-  const timeCreated = peerConnections[id].timeCreated;
+  const timeConnected = peerConnections[id].timeConnected;
   const currentTime = Date.now();
-  const timeElapsed = currentTime - timeCreated;
+  const timeElapsed = currentTime - timeConnected;
   return timeElapsed >= 1000;
 }
 
@@ -276,11 +280,18 @@ function _setBegunIceSearch() {
   begunIceSearch = true;
 }
 
+function _disconnectedForSecond(id) {
+  if (!disconnectTimes[id]) return true;
+  const timeElapsed = Date.now() - disconnectTimes[id];
+  return timeElapsed >= 1000;
+}
+
 function _disconnectFromUser(peerUuid) {
   if (peerConnections[peerUuid]) {
     console.log(`disconnecting from peer, ${peerUuid}`);
     peerConnections[peerUuid].pc.close();
     delete peerConnections[peerUuid];
+    disconnectTimes[peerUuid] = Date.now();
   }
 }
 
@@ -368,9 +379,10 @@ let setRemoteDescForPC = LINKS.kify(_setRemoteDescForPC);
 let checkIfRemoteDescSetForPC = LINKS.kify(_checkIfRemoteDescSetForPC);
 let checkIfConnectedToPeer = LINKS.kify(_checkIfConnectedToPeer);
 let checkIfPCObjectExists= LINKS.kify(_checkIfPCObjectExists);
-let oneSecondsElapsed = LINKS.kify(_oneSecondElapsed);
+let oneSecondElapsed = LINKS.kify(_oneSecondElapsed);
 let getBegunIceSearch = LINKS.kify(_getBegunIceSearch);
 let setBegunIceSearch = LINKS.kify(_setBegunIceSearch);
+let disconnectedForSecond = LINKS.kify(_disconnectedForSecond);
 let disconnectFromUser = LINKS.kify(_disconnectFromUser);
 let collectCandidates = LINKS.kify(_collectCandidates);
 let addCandidates = LINKS.kify(_addCandidates);

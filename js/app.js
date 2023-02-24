@@ -1,4 +1,5 @@
 const peerUuids = [];
+const messageTimes = [];
 let imgURL = "";
 const adjectives = ["Excited", "Anxious", "Demonic", "Jumpy", 
                    "Misunderstood", "Squashed", "Gargantuan","Broad", "Crooked", 
@@ -20,6 +21,25 @@ const adjectives = ["Excited", "Anxious", "Demonic", "Jumpy",
 
 function _getName(id) {
   return adjectives[id-1];
+}
+
+function average(arr) {
+  return arr.reduce((a, b) => a + b) / arr.length;
+}
+
+function _createAverageTimeButton() {
+  const button = document.createElement('button');
+  button.setAttribute('id', 'average-times');
+  button.innerHTML = 'Get average times';
+  document.body.appendChild(button);
+  button.addEventListener('click', function() {
+    const avg = average(messageTimes);
+    alert('Average processing time: ' + avg);
+  })
+}
+
+function _addMessageTime(tm) {
+  messageTimes.push(tm);
 }
 
 function _checkLocalVidExists() {
@@ -78,7 +98,7 @@ function _addAudio(id) {
 }
 
 function _displayLiveStream(id) {
-  console.log("Displaying stream of " + id);
+  //console.log("Displaying stream of " + id);
   if (id == 0 && !!document.getElementById('localVideoTemp') && !document.getElementById('localVideoDiv')) {
     appendVidToDiv('localVideo', true);
   } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !document.getElementById('remoteVideo_' + id + 'Div')) {
@@ -90,6 +110,11 @@ function _displayLiveStream(id) {
     _addPeerToList(id);
     appendVidToDiv('remoteVideo_' + id, false);
   }
+}
+
+function _removeLocalVid() {
+  const localVid = document.getElementById('localVideoDiv');
+  document.body.removeChild(localVid);
 }
 
 function _displayedPeerStream(id) {
@@ -175,12 +200,15 @@ function _addPeerToList(uuid) {
   peerUuids.push(uuid);
 }
 
+let addMessageTime = LINKS.kify(_addMessageTime);
+let createAverageTimeButton = LINKS.kify(_createAverageTimeButton);
 let addAudio = LINKS.kify(_addAudio);
 let displayLiveStream = LINKS.kify(_displayLiveStream);
 let displayedPeerStream = LINKS.kify(_displayedPeerStream);
 let removePeerVideoDiv = LINKS.kify(_removePeerVideoDiv);
 let removePeerAudioDiv = LINKS.kify(_removePeerAudioDiv);
 let takePicture = LINKS.kify(_takePicture);
+let removeLocalVid = LINKS.kify(_removeLocalVid);
 let getPictureURL = LINKS.kify(_getPictureURL);
 let displayIcon = LINKS.kify(_displayIcon);
 let getSelectedOptions = LINKS.kify(_getSelectedOptions);

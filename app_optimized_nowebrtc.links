@@ -10,8 +10,6 @@ typename ID = Int;
 
 module JSApp {
   alien javascript "js/app.js" {
-    addMessageTime : (Float) ~> ();
-    createAverageTimeButton : () ~> ();
     displayLiveStream : (ID) ~> ();
     displayedPeerStream : (ID) ~> Bool;
     removePeerVideoDiv : (ID) ~> ();
@@ -64,7 +62,7 @@ typename Position = (Float, Float);
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
 
-typename PositionInfo = (id: ID, x : Float, y : Float, timeReceived : Int);
+typename PositionInfo = (id: ID, x : Float, y : Float);
 typename IconInfo = (id: ID, name : String, imageURL : String, x : Float, y : Float);
 
 typename ServerMessage = 
@@ -157,7 +155,7 @@ fun defaultRoom(clientPid) {
   } else {
     (100.0 *. intToFloat(localID), 400.0)
   };
-  JSApp.takePicture();
+  #JSApp.takePicture();
   JSApp.removeLocalVid();
   var pictureURL = JSApp.getPictureURL();
   var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, x = halfWidth, y = halfHeight);
@@ -462,6 +460,8 @@ fun isCloseToPeer(localChar, peerChar) {
 fun confirmConnection(localChar, peerChar) {
   if (WebRTC.checkIfConnectedToPeer(peerChar.id)) {
     JSApp.displayLiveStream(peerChar.id)
+    #var charPos = CharacterPosition(id = localChar.id, x = localChar.x, y = localChar.y);
+    #serverPid ! BroadcastMessage(charPos)
   } else if (not(WebRTC.checkIfPCObjectExists(peerChar.id))){
     print("Connection doesn't even exist anymore, silly")
   } else {
@@ -627,7 +627,7 @@ fun updt(msg, room) {
         #var chosenHub = randomHub();
         var dirs = determineDirections((room.charData.x, room.charData.y), chosenHub);
         var newChar = moveChar(room.charData, dirs);
-        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
+        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
         serverPid ! BroadcastMessage(charPos);
         #manageConnections(room.charData, room.others);
         ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = chosenHub), MvuCommands.empty)
@@ -635,7 +635,7 @@ fun updt(msg, room) {
         var dirs = determineDirections((room.charData.x, room.charData.y), room.localBase);
         printDirections(dirs);
         var newChar = moveChar(room.charData, dirs);
-        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
+        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
         serverPid ! BroadcastMessage(charPos);
         #manageConnections(room.charData, room.others);
         ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = room.localBase), MvuCommands.empty)
@@ -645,13 +645,13 @@ fun updt(msg, room) {
         var charMoved = characterMoved(room.charData, newChar);
         if (charMoved && distanceToTarg > 10.0) {
           var newDirs = determineDirections((room.charData.x, room.charData.y), room.currentTarget);
-          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
+          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
           serverPid ! BroadcastMessage(charPos);
           #manageConnections(room.charData, room.others);
           ((room with charData = newChar, directions = newDirs), MvuCommands.empty)
         } else if (charMoved && distanceToTarg <= 10.0) {
           var newDirs = (up = false, down = false, left = false, right = false);
-          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
+          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y);
           var newTarget = if (room.currentTarget == room.localBase) {
             chosenHub
           } else {
@@ -892,27 +892,29 @@ fun drain(messages, pids) {
 }
 
 #invariant, at least one of msgs, pids is empty.
-fun clientLoop(msgs, pids, timeStarted, numMessages, lastMessageTime, hndl) {
+fun clientLoop(msgs, pids) {
     receive {
       case Message(msg) ->
-        switch(msg) {
-          case CharacterPosition(info) ->
-            JSApp.addMessageTime(intToFloat(clientTimeMilliseconds() - lastMessageTime) /. 1000.0);
-            var tm = clientTimeMilliseconds();
-            var timeElapsed = intToFloat(tm - timeStarted) /. 1000.0;
-            print("Average messages per second: " ^^ floatToString(intToFloat(numMessages+1) /. timeElapsed) ^^ " | " ^^ floatToString(timeElapsed) ^^ "\n");
-            var charPos = CharacterPosition(info with timeReceived = clientTimeMilliseconds());
-            Mvu.dispatch(ServerMsg(charPos), hndl);
-            clientLoop(msgs, pids, timeStarted, numMessages + 1, tm, hndl)
-          case CharacterIcon(info) ->
-            Mvu.dispatch(ServerMsg(msg), hndl);
-            clientLoop(msgs, pids, timeStarted, numMessages, lastMessageTime, hndl)
-        }
-
+        var (msgs, pids) = drain(msgs ++ [msg], pids);
+        clientLoop(msgs, pids)
+      
       case RetrieveMsg(pid) ->
         var (msgs, pids) = drain(msgs, pids ++ [pid]);
-        clientLoop(msgs, pids, timeStarted, numMessages, lastMessageTime, hndl)
+        clientLoop(msgs, pids)
     }
+}
+
+#begins webRTC connection and registers client with server
+fun clientRegister() {
+  WebRTC.gatherDeviceIds("videoinput");
+  WebRTC.gatherDeviceIds("audioinput");
+  WebRTC.readyCam("_");
+  WebRTC.readyMic("_");
+  WebRTC.createLocalVideo();
+  WebRTC.registerUser();
+  JSApp.displayLiveStream(0);
+  serverPid ! Register(self());
+  clientLoop([], [])
 }
 
 fun waitForID() {
@@ -931,27 +933,18 @@ fun waitForLocalVid() {
     waitForLocalVid()
 }
 
-#begins webRTC connection and registers client with server
-fun clientRegister() {
-  WebRTC.gatherDeviceIds("videoinput");
-  WebRTC.gatherDeviceIds("audioinput");
-  WebRTC.readyCam("_");
-  WebRTC.readyMic("_");
-  WebRTC.createLocalVideo();
-  WebRTC.registerUser();
-  JSApp.displayLiveStream(0);
+fun runMVU(clientPid) {
   waitForID();
   waitForLocalVid();
   sleep(500);
-  var hndl = Mvu.runHandle("placeholder", defaultRoom(self()), view, updt,
-      subscriptions, MvuCommands.empty);
-  JSApp.createAverageTimeButton();
-  serverPid ! Register(self());
-  clientLoop([], [], clientTimeMilliseconds(), 0, clientTimeMilliseconds(), hndl)
+  Mvu.run("placeholder", defaultRoom(clientPid), view, updt,
+      subscriptions, MvuCommands.spawnProc(fun () { retrieveServerMessage(clientPid) }));
+  ()
 }
 
 fun mainPage(serverPid) {
   var clientPid = spawnClient { clientRegister() };
+  var mvuClient = spawnClient { runMVU(clientPid) };
   page
   <html>
     <head>

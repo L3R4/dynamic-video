@@ -64,11 +64,11 @@ typename Position = (Float, Float);
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
 
-typename PositionInfo = (id: ID, x : Float, y : Float, timeReceived : Int);
-typename IconInfo = (id: ID, name : String, imageURL : String, x : Float, y : Float);
+typename PositionInfo = (id : ID, target : Position, timeReceived : Int);
+typename IconInfo = (id: ID, name : String, imageURL : String, position : Position, target : Position);
 
 typename ServerMessage = 
-  [| CharacterPosition : PositionInfo
+  [| TargetPosition : PositionInfo
    | CharacterIcon : IconInfo
   |];
 
@@ -94,8 +94,8 @@ typename RequestMsg =
 typename CharacterData = 
   (id: ID, 
    name: String,
-   x : Float, 
-   y: Float, 
+   position : Position,
+   target : Position,
    imageURL : String
   );
 
@@ -160,13 +160,13 @@ fun defaultRoom(clientPid) {
   JSApp.takePicture();
   JSApp.removeLocalVid();
   var pictureURL = JSApp.getPictureURL();
-  var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, x = halfWidth, y = halfHeight);
+  var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, position = (halfWidth, halfHeight), target = (halfWidth, halfHeight));
   serverPid ! BroadcastMessage(charIcon);
   (charData = 
     (id = localID, 
      name = localName, 
-     x = halfWidth, 
-     y = halfHeight, 
+     position = (halfWidth, halfHeight),
+     target = (halfWidth, halfHeight),
      imageURL = pictureURL
     ),
    directions =
@@ -351,10 +351,10 @@ fun moveChar(charData, directions) {
   } else {
     xDis1
   };
-  var newX = charData.x +. xDis2;
-  var newY = charData.y +. yDis2;
+  var newX = first(charData.position) +. xDis2;
+  var newY = second(charData.position) +. yDis2;
   if (newX >= 0.0 && newX <= xLim && newY >= 0.0 && newY <= yLim)
-    (charData with x = newX, y = newY)
+    (charData with position = (newX, newY))
   else
     charData
 }
@@ -387,6 +387,17 @@ fun determineDirections(currentPos, targetPos) {
   }
 }
 
+sig updateOthers : ([CharacterData]) ~> [CharacterData]
+fun updateOthers(others) {
+  switch(others) {
+    case [] -> []
+    case x::xs ->
+      var dirs = determineDirections(x.position, x.target);
+      var newChar = moveChar(x, dirs);
+      newChar :: updateOthers(xs)
+  }
+}
+
 fun printDirections(directions) {
   var str1 = "(";
   var str2 = if (directions.up) {
@@ -415,7 +426,7 @@ fun printDirections(directions) {
 
 sig characterMoved : (CharacterData, CharacterData) ~> Bool
 fun characterMoved(oldCharData, newCharData) {
-  oldCharData.x <> newCharData.x || oldCharData.y <> newCharData.y
+  first(oldCharData.position) <> first(newCharData.position) || second(oldCharData.position) <> second(newCharData.position)
 }
 
 #replaces charData in list of charDatas
@@ -452,7 +463,11 @@ fun getCharWithId(id, chars) {
 }
 
 fun isCloseToPeer(localChar, peerChar) {
-  var distance = euclideanDistance((localChar.x, localChar.y), (peerChar.x, peerChar.y));
+  var xLocalChar = first(localChar.position);
+  var yLocalChar = second(localChar.position);
+  var xPeerChar = first(peerChar.position);
+  var yPeerChar = second(peerChar.position);
+  var distance = euclideanDistance((xLocalChar, yLocalChar), (xPeerChar, yPeerChar));
   if (distance <= 75.0)
     true
   else
@@ -556,26 +571,17 @@ fun retrieveServerMessage(pid) {
 sig processServerMsg : (ServerMessage, Room) ~> Room
 fun processServerMsg(serverMsg, room) {
   switch(serverMsg){
-    case CharacterPosition(info) ->
+    case TargetPosition(info) ->
       if (info.id <> room.charData.id && 
           room.state == "joined" && 
           charWithIdExists(info.id, room.others)
           ) {
+        var messageTime = intToFloat(clientTimeMilliseconds() - info.timeReceived) /. 1000.0;
+        JSApp.addMessageTime(messageTime);
         var currentChar = getCharWithId(info.id, room.others);
-        var newChar = (currentChar with x = info.x, y = info.y);
+        var newChar = (currentChar with target = info.target);
         var newPeerList = replaceChar(newChar, room.others);
-        var isClose = isCloseToPeer(room.charData, newChar);
-        if (isClose) {
-          JSApp.displayLiveStream(newChar.id);
-          (room with others = newPeerList)
-        } else {
-          if (not(WebRTC.checkIfPCObjectExists(newChar.id))) {
-            JSApp.removePeerVideoDiv(newChar.id);
-            (room with others = newPeerList)
-          } else {
-            (room with others = newPeerList)
-          }
-        }
+        (room with others = newPeerList)
       } else {
         room
       }
@@ -587,8 +593,8 @@ fun processServerMsg(serverMsg, room) {
         var charData = 
           (id = info.id, 
            name = info.name, 
-           x = info.x, 
-           y = info.y, 
+           position = info.position,
+           target = info.target,
            imageURL = info.imageURL
           );
         var appendToOthers = charData :: room.others;
@@ -597,8 +603,8 @@ fun processServerMsg(serverMsg, room) {
           CharacterIcon(id = cData.id, 
                         name = cData.name, 
                         imageURL = cData.imageURL,
-                        x = room.charData.x,
-                        y = room.charData.y
+                        position = room.charData.position,
+                        target = room.charData.target
                         );
         serverPid ! BroadcastMessage(charIcon);
         serverPid ! BroadcastMessage(charIcon);
@@ -625,43 +631,45 @@ fun updt(msg, room) {
       if (timeMod8 == 0 && currentTime <> room.prevTimeChosen) {
         print("Moving to hub");
         #var chosenHub = randomHub();
-        var dirs = determineDirections((room.charData.x, room.charData.y), chosenHub);
+        var dirs = determineDirections(room.charData.position, chosenHub);
         var newChar = moveChar(room.charData, dirs);
-        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
+        var newChar2 = (newChar with target = chosenHub);
+        var newOthers = updateOthers(room.others);
+        var charPos = TargetPosition(id = newChar.id, target = chosenHub, timeReceived = -1);
         serverPid ! BroadcastMessage(charPos);
-        #manageConnections(room.charData, room.others);
-        ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = chosenHub), MvuCommands.empty)
+        #manageConnections(room.charData, newOthers);
+        ((room with charData = newChar2, directions = dirs, others = newOthers, prevTimeChosen = currentTime, currentTarget = chosenHub), MvuCommands.empty)
       } else if (timeMod4 == 0 && currentTime <> room.prevTimeChosen) {
-        var dirs = determineDirections((room.charData.x, room.charData.y), room.localBase);
+        var dirs = determineDirections(room.charData.position, room.localBase);
         printDirections(dirs);
         var newChar = moveChar(room.charData, dirs);
-        var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
+        var newChar2 = (newChar with target = room.localBase);
+        var newOthers = updateOthers(room.others);
+        var charPos = TargetPosition(id = newChar.id, target = room.localBase, timeReceived = -1);
         serverPid ! BroadcastMessage(charPos);
-        #manageConnections(room.charData, room.others);
-        ((room with charData = newChar, directions = dirs, prevTimeChosen = currentTime, currentTarget = room.localBase), MvuCommands.empty)
+        #manageConnections(room.charData, newOthers);
+        ((room with charData = newChar2, directions = dirs, others = newOthers, prevTimeChosen = currentTime, currentTarget = room.localBase), MvuCommands.empty)
       } else {
         var newChar = moveChar(room.charData, room.directions);
-        var distanceToTarg = euclideanDistance((newChar.x, newChar.y), room.currentTarget);
+        var newOthers = updateOthers(room.others);
+        var distanceToTarg = euclideanDistance(newChar.position, room.currentTarget);
         var charMoved = characterMoved(room.charData, newChar);
         if (charMoved && distanceToTarg > 10.0) {
-          var newDirs = determineDirections((room.charData.x, room.charData.y), room.currentTarget);
-          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
-          serverPid ! BroadcastMessage(charPos);
-          #manageConnections(room.charData, room.others);
-          ((room with charData = newChar, directions = newDirs), MvuCommands.empty)
+          var newDirs = determineDirections(room.charData.position, room.currentTarget);
+          #manageConnections(room.charData, newOthers);
+          ((room with charData = newChar, directions = newDirs, others = newOthers), MvuCommands.empty)
         } else if (charMoved && distanceToTarg <= 10.0) {
           var newDirs = (up = false, down = false, left = false, right = false);
-          var charPos = CharacterPosition(id = newChar.id, x = newChar.x, y = newChar.y, timeReceived = -1);
           var newTarget = if (room.currentTarget == room.localBase) {
             chosenHub
           } else {
             room.localBase
           };
-          serverPid ! BroadcastMessage(charPos);
-          #manageConnections(room.charData, room.others);
-          ((room with charData = newChar, directions = newDirs, currentTarget = newTarget), MvuCommands.empty)
+          #manageConnections(room.charData, newOthers);
+          ((room with charData = newChar, directions = newDirs, others = newOthers, currentTarget = newTarget), MvuCommands.empty)
         } else {
-          (room, MvuCommands.empty)
+          #manageConnections(room.charData, newOthers);
+          ((room with others = newOthers), MvuCommands.empty)
         }
       }
     
@@ -689,7 +697,7 @@ fun updt(msg, room) {
       JSApp.takePicture();
       var pictureURL = JSApp.getPictureURL();
       var cData = (room.charData with id = WebRTC.getID(), name = room.nameField, imageURL = pictureURL);
-      var charIcon = CharacterIcon(id = cData.id, name = cData.name, imageURL = pictureURL, x = cData.x, y = cData.y);
+      var charIcon = CharacterIcon(id = cData.id, name = cData.name, imageURL = pictureURL, position = cData.position, target = cData.target);
       serverPid ! BroadcastMessage(charIcon);
       ((room with charData = cData, state = "joined"), MvuCommands.empty)
     
@@ -712,8 +720,8 @@ fun ca(xs) { MvuAttrs.concat(xs) }
 #HTML for charData
 sig drawChar : (CharacterData) -> HTML(Msg)
 fun drawChar(c) {
-  var x = c.x;
-  var y = c.y;
+  var x = first(c.position);
+  var y = second(c.position);
   var name = c.name;
   div (class ("character") +@
     style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;" ^^
@@ -896,12 +904,11 @@ fun clientLoop(msgs, pids, timeStarted, numMessages, lastMessageTime, hndl) {
     receive {
       case Message(msg) ->
         switch(msg) {
-          case CharacterPosition(info) ->
-            JSApp.addMessageTime(intToFloat(clientTimeMilliseconds() - lastMessageTime) /. 1000.0);
+          case TargetPosition(info) ->
             var tm = clientTimeMilliseconds();
             var timeElapsed = intToFloat(tm - timeStarted) /. 1000.0;
             print("Average messages per second: " ^^ floatToString(intToFloat(numMessages+1) /. timeElapsed) ^^ " | " ^^ floatToString(timeElapsed) ^^ "\n");
-            var charPos = CharacterPosition(info with timeReceived = clientTimeMilliseconds());
+            var charPos = TargetPosition(info with timeReceived = clientTimeMilliseconds());
             Mvu.dispatch(ServerMsg(charPos), hndl);
             clientLoop(msgs, pids, timeStarted, numMessages + 1, tm, hndl)
           case CharacterIcon(info) ->

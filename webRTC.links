@@ -38,6 +38,7 @@ module JSWebRTC {
         oneSecondElapsed : (ID) ~> Bool;
         getBegunIceSearch : () ~> Bool;
         setBegunIceSearch : () ~> ();
+        disconnectedForSecond : (ID) ~> Bool;
         disconnectFromUser : (ID) ~> ();
         collectCandidates : () ~> (Candidates);
         addCandidates : (Candidates, ID) ~> ();
@@ -97,6 +98,10 @@ fun checkIfPCObjectExists(peerID) {
 
 fun oneSecondElapsed(peerID) {
   JSWebRTC.oneSecondElapsed(peerID)
+}
+
+fun disconnectedForSecond(peerID) {
+  JSWebRTC.disconnectedForSecond(peerID)
 }
 
 fun handleIceCandidates() {
@@ -187,6 +192,11 @@ fun handleMessage(msg) {
         } else {
           ()
         }
+      } else if (localID > peerID) {
+        JSWebRTC.updateConnectionID(peerID, connectionID);
+        prepareDescriptionForPC(peerID, "offer");
+        sendDescriptionForPC(peerID, "offer");
+        ()
       } else {
         ()
       }
@@ -299,7 +309,7 @@ fun clientRegister() {
 
 fun connectToUser(peerID) {
   var localID = JSWebRTC.getLocalID();
-  if (not(checkIfConnectedToPeer(peerID)) && localID > peerID) {
+  if (not(checkIfConnectedToPeer(peerID))) {
     setUpNewPeer(peerID, "_", false);
     var connectionID = JSWebRTC.getConnectionID(peerID);
     var begunIceSearch = JSWebRTC.getBegunIceSearch();
