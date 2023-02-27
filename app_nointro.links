@@ -23,6 +23,7 @@ module JSApp {
     addPeerToList : (ID) ~> ();
     getName : (ID) ~> String;
     checkLocalVidExists : () ~> Bool;
+    removeLocalVid : () ~> ();
   }
 }
 
@@ -53,6 +54,10 @@ fun serverLoop(clients) server {
 var serverPid = spawn { serverLoop([]) };
 
 typename DeviceID = String;
+
+typename Position = (x : Float, y : Float);
+
+typename Vector = (x : Float, y : Float);
 
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
@@ -115,6 +120,9 @@ typename Room =
 var halfWidth = 650.0;
 var halfHeight = 200.0;
 var charVelocity = 5.0;
+
+var xLim = 1200.0;
+var yLim = 400.0;
 
 #default room to start with
 fun defaultRoom(clientPid) {
@@ -221,6 +229,11 @@ fun mediaClickHandler() {
   })
 }
 
+sig euclideanDistance : (Position, Position) ~> Float
+fun euclideanDistance(pos1, pos2) {
+  sqrt((pos1.x -. pos2.x)^.2.0 +. (pos1.y -. pos2.y)^.2.0)
+}
+
 fun isCharInList(c, lst) {
   switch(lst) {
     case [] -> false
@@ -305,7 +318,26 @@ fun moveChar(charData, directions) {
   } else {
     xDis1
   };
-  (charData with x = charData.x +. xDis2, y = charData.y +. yDis2)
+  var newX = charData.x +. xDis2;
+  var newY = charData.y +. yDis2;
+  if (newX >= 0.0 && newX <= xLim && newY >= 0.0 && newY <= yLim)
+    (charData with x = newX, y = newY)
+  else
+    charData
+}
+
+sig determineVector : (Position, Position) ~> Vector
+fun determineVector(pos1, pos2) {
+  var vec = (x = pos2.x -. pos1.x, y = pos2.y -. pos1.y);
+  var size = euclideanDistance(pos1, pos2);
+  if (size > 5.0) {
+    var ratio = size /. 5.0;
+    var newX = vec.x /. ratio;
+    var newY = vec.y /. ratio;
+    (x = newX, y = newY)
+  } else {
+    (x = vec.x, y = vec.y)
+  }
 }
 
 sig characterMoved : (CharacterData, CharacterData) ~> Bool
@@ -347,10 +379,8 @@ fun getCharWithId(id, chars) {
 }
 
 fun isCloseToPeer(localChar, peerChar) {
-  var distance = sqrt((peerChar.x -. localChar.x)^.2.0 +. 
-                      (peerChar.y -. localChar.y)^.2.0
-                     );
-  if (distance <= 150.0)
+  var distance = euclideanDistance((x = localChar.x, y = localChar.y), (x = peerChar.x, y = peerChar.y));
+  if (distance <= 75.0)
     true
   else
     false
@@ -359,8 +389,6 @@ fun isCloseToPeer(localChar, peerChar) {
 fun confirmConnection(localChar, peerChar) {
   if (WebRTC.checkIfConnectedToPeer(peerChar.id)) {
     JSApp.displayLiveStream(peerChar.id)
-    #var charPos = CharacterPosition(id = localChar.id, x = localChar.x, y = localChar.y);
-    #serverPid ! BroadcastMessage(charPos)
   } else if (not(WebRTC.checkIfPCObjectExists(peerChar.id))){
     print("Connection doesn't even exist anymore, silly")
   } else {
@@ -369,7 +397,7 @@ fun confirmConnection(localChar, peerChar) {
 }
 
 fun connectToPeer(localChar, peerChar) {
-  print("Calling connectToUser");
+  print("Calling connectToUser to " ^^ intToString(peerChar.id));
   WebRTC.connectToUser(peerChar.id);
   confirmConnection(localChar, peerChar)
 }
@@ -378,7 +406,7 @@ fun connectToPeers(charData, peerChars) {
   switch(peerChars) {
     case [] -> ()
     case x::xs ->
-      if (WebRTC.checkIfPCObjectExists(x.id) == false) {
+      if (not(WebRTC.checkIfPCObjectExists(x.id)) && WebRTC.disconnectedForSecond(x.id)) {
         var connId = spawnClient { connectToPeer(charData, x) };
         connectToPeers(charData, xs)
       } else {
@@ -396,9 +424,7 @@ fun disconnectFromPeers(peerChars) {
   switch(peerChars) {
     case [] -> ()
     case x::xs ->
-    if (WebRTC.checkIfConnectedToPeer(x.id) || 
-        WebRTC.checkIfPCObjectExists(x.id)
-        ) {
+    if (WebRTC.checkIfConnectedToPeer(x.id) && WebRTC.oneSecondElapsed(x.id)) {
       disconnectFromPeer(x);
       disconnectFromPeers(xs)
     } else {
@@ -471,7 +497,7 @@ fun processServerMsg(serverMsg, room) {
           (room with others = newPeerList)
         } else {
           if (not(WebRTC.checkIfPCObjectExists(newChar.id))) {
-            disconnectFromPeer(newChar);
+            JSApp.removePeerVideoDiv(newChar.id);
             (room with others = newPeerList)
           } else {
             (room with others = newPeerList)
@@ -481,8 +507,6 @@ fun processServerMsg(serverMsg, room) {
         room
       }
     case CharacterIcon(info) ->
-      print("Got icon:");
-      print(info.name);
       if (info.id <> room.charData.id && 
           room.state == "joined" && 
           not(charWithIdExists(info.id, room.others))

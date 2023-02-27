@@ -59,7 +59,7 @@ var serverPid = spawn { serverLoop([], 0, serverTimeMilliseconds()) };
 
 typename DeviceID = String;
 
-typename Position = (Float, Float);
+typename Position = (x : Float, y : Float);
 
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
