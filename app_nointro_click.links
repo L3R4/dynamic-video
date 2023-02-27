@@ -1,0 +1,536 @@
+# currently works under the condition that users don't
+# move within the range of others, move out, then move
+# back in within 3 seconds
+open import MvuHTML;
+open import MvuAttrs;
+open import MvuEvents;
+open import MvuSubscriptions;
+import Mvu;
+import MvuCommands;
+import WebRTC;
+
+typename ID = Int;
+
+module JSApp {
+  alien javascript "js/app.js" {
+    displayLiveStream : (ID) ~> ();
+    displayedPeerStream : (ID) ~> Bool;
+    removePeerVideoDiv : (ID) ~> ();
+    takePicture : () ~> ();
+    getPictureURL : () ~> String;
+    displayIcon : (ID, String, String, String) ~> ();
+    getSelectedOptions : () ~> [String];
+    addPeerToList : (ID) ~> ();
+    getName : (ID) ~> String;
+    checkLocalVidExists : () ~> Bool;
+    removeLocalVid : () ~> ();
+  }
+}
+
+#broacasts message to all clients on server
+fun broadcast(clients, msg) server {
+    switch (clients) {
+        case [] -> ()
+        case x::xs ->
+            x ! msg;
+            broadcast(xs, msg)
+    }
+}
+
+#waits for message, sends message to call clients on server
+fun serverLoop(clients) server {
+    receive {
+        case Register(pid) ->
+          var newClients = pid :: clients;
+          serverLoop(newClients)
+
+        case BroadcastMessage(msg) ->
+          broadcast(clients, Message(msg));
+          serverLoop(clients)
+    }
+}
+
+var serverPid = spawn { serverLoop([]) };
+
+typename DeviceID = String;
+
+typename Position = (x : Float, y : Float);
+
+typename Vector = (x : Float, y : Float);
+
+#different ways the character can move
+typename CharacterState = [| Up | Down | Left | Right |];
+
+typename TargetInfo = (id : ID, target : Position);
+typename IconInfo = (id: ID, name : String, imageURL : String, position : Position, target : Position);
+
+typename ServerMessage = 
+  [| TargetPosition : TargetInfo
+   | CharacterIcon : IconInfo
+  |];
+
+#messages that the updt function receivesW
+typename Msg =
+  [| NewFrame
+   | Click : (Int, Int)
+   | NoOp
+   | ServerMsg : ServerMessage
+  |];
+
+typename RequestMsg =
+  [| Message : ServerMessage |];
+
+#datetype for character
+typename CharacterData = 
+  (id: ID, 
+   name: String,
+   position : Position,
+   target : Position, 
+   imageURL : String
+  );
+
+#this is the model for MVU
+typename Room =
+  (charData : CharacterData, 
+   others : [CharacterData],
+   pid : Process({hear : RequestMsg})
+  );
+
+#parameters
+var halfWidth = 550.0;
+var halfHeight = 200.0;
+var charVelocity = 5.0;
+
+var xLim = 1130.0;
+var yLim = 430.0;
+
+#default room to start with
+fun defaultRoom(clientPid) {
+  var localID = WebRTC.getID();
+  var localName = JSApp.getName(localID);
+  JSApp.takePicture();
+  var pictureURL = JSApp.getPictureURL();
+  var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, position = (x = halfWidth, y = halfHeight), target = (x = halfWidth, y = halfHeight));
+  serverPid ! BroadcastMessage(charIcon);
+  (charData = 
+    (id = localID, 
+     name = localName, 
+     position = (x = halfWidth, y = halfHeight),
+     target = (x = halfWidth, y = halfHeight),
+     imageURL = pictureURL
+    ),
+   others = [],
+   pid = clientPid
+  )
+}
+
+#runs every frame
+fun animFrameHandler() {
+  animationFrame(fun(_) { NewFrame })
+}
+
+fun mouseDownHandler() {
+  open MvuSubscriptions;
+
+  onMouseDown(fun(evt) {
+    var xPos = evt.clientX - 50 - 35;
+    var yPos = evt.clientY - 250 - 35;
+    Click(xPos, yPos)
+  })
+}
+
+sig euclideanDistance : (Position, Position) ~> Float
+fun euclideanDistance(pos1, pos2) {
+  sqrt((pos1.x -. pos2.x)^.2.0 +. (pos1.y -. pos2.y)^.2.0)
+}
+
+fun isCharInList(c, lst) {
+  switch(lst) {
+    case [] -> false
+    case x::xs ->
+      if (x.id == c.id)
+        true
+      else
+        isCharInList(c, xs)
+  }
+}
+
+fun printNames(chars) {
+  switch(chars) {
+    case [] -> ()
+    case x::xs ->
+      print(x.name);
+      printNames(xs)
+  }
+}
+
+fun printNamesHandler(chars) {
+  onClick(fun() {
+    if (length(chars) > 0) {
+      print("Other users:");
+      printNames(chars);
+      NoOp
+    } else {
+      print("No other users");
+      NoOp
+    }
+  })
+}
+
+sig determineVector : (Position, Position) ~> Vector
+fun determineVector(pos1, pos2) {
+  var vec = (x = pos2.x -. pos1.x, y = pos2.y -. pos1.y);
+  var size = euclideanDistance(pos1, pos2);
+  if (size > charVelocity) {
+    var ratio = size /. charVelocity;
+    var newX = vec.x /. ratio;
+    var newY = vec.y /. ratio;
+    (x = newX, y = newY)
+  } else {
+    (x = vec.x, y = vec.y)
+  }
+}
+
+sig moveChar : (CharacterData, Vector) ~> CharacterData
+fun moveChar(charData, vec) {
+  var newPos = (x = charData.position.x +. vec.x, y = charData.position.y +. vec.y);
+  (charData with position = newPos)
+}
+
+sig updateOthers : ([CharacterData]) ~> [CharacterData]
+fun updateOthers(others) {
+  switch(others) {
+    case [] -> []
+    case x::xs ->
+      var vec = determineVector(x.position, x.target);
+      var newChar = moveChar(x, vec);
+      newChar :: updateOthers(xs)
+  }
+}
+
+sig characterMoved : (CharacterData, CharacterData) ~> Bool
+fun characterMoved(oldCharData, newCharData) {
+  oldCharData.position.x <> newCharData.position.x || oldCharData.position.y <> newCharData.position.y
+}
+
+#replaces charData in list of charDatas
+fun replaceChar(char, peerChars) {
+  switch(peerChars) {
+    case [] -> []
+    case x::xs ->
+      if (x.id == char.id)
+        char :: replaceChar(char, xs)
+      else
+        x :: replaceChar(char, xs)
+  }
+}
+
+fun charWithIdExists(id, chars) {
+  switch(chars) {
+    case [] -> false
+    case x::xs ->
+      if (x.id == id)
+        true
+      else
+        charWithIdExists(id, xs)
+  }
+}
+
+fun getCharWithId(id, chars) {
+  switch(chars) {
+    case x::xs ->
+      if (x.id == id)
+        x
+      else
+        getCharWithId(id, xs)
+  }
+}
+
+fun isCloseToPeer(localChar, peerChar) {
+  var xLocal = localChar.position.x;
+  var yLocal = localChar.position.y;
+  var xPeer = peerChar.position.x;
+  var yPeer = peerChar.position.y;
+  var distance = euclideanDistance((x = xLocal, y = yLocal), (x = xPeer, y = yPeer));
+  if (distance <= 75.0)
+    true
+  else
+    false
+}
+
+fun confirmConnection(localChar, peerChar) {
+  if (WebRTC.checkIfConnectedToPeer(peerChar.id)) {
+    JSApp.displayLiveStream(peerChar.id)
+  } else if (not(WebRTC.checkIfPCObjectExists(peerChar.id))){
+    print("Connection doesn't even exist anymore, silly")
+  } else {
+    confirmConnection(localChar, peerChar)
+  }
+}
+
+fun connectToPeer(localChar, peerChar) {
+  print("Calling connectToUser to " ^^ intToString(peerChar.id));
+  WebRTC.connectToUser(peerChar.id);
+  confirmConnection(localChar, peerChar)
+}
+
+fun connectToPeers(charData, peerChars) {
+  switch(peerChars) {
+    case [] -> ()
+    case x::xs ->
+      JSApp.displayLiveStream(x.id);
+      if (not(WebRTC.checkIfPCObjectExists(x.id)) && WebRTC.disconnectedForSecond(x.id)) {
+        var connId = spawnClient { connectToPeer(charData, x) };
+        connectToPeers(charData, xs)
+      } else {
+        connectToPeers(charData, xs)
+      }
+  }
+}
+
+fun disconnectFromPeer(peerChar) {
+  WebRTC.disconnectFromUser(peerChar.id);
+  JSApp.removePeerVideoDiv(peerChar.id)
+}
+
+fun disconnectFromPeers(peerChars) {
+  switch(peerChars) {
+    case [] -> ()
+    case x::xs ->
+      JSApp.removePeerVideoDiv(x.id);
+      if (WebRTC.checkIfConnectedToPeer(x.id) && WebRTC.oneSecondElapsed(x.id)) {
+        disconnectFromPeer(x);
+        disconnectFromPeers(xs)
+      } else {
+        if (not(WebRTC.checkIfPCObjectExists(x.id))) {
+          JSApp.removePeerVideoDiv(x.id);
+          disconnectFromPeers(xs)
+        } else {
+          disconnectFromPeers(xs)
+        }
+      }
+  }
+}
+
+fun getClosePeers(localChar, others) {
+  switch(others) {
+    case [] -> []
+    case x::xs ->
+      var isClose = isCloseToPeer(localChar, x);
+      if (isClose)
+        x :: getClosePeers(localChar, xs)
+      else
+        getClosePeers(localChar, xs)
+  }
+}
+
+fun getFarPeers(others, closePeers) {
+  switch(others) {
+    case [] -> []
+    case x::xs ->
+      var isFarPeer = not(isCharInList(x, closePeers));
+      if (isFarPeer)
+        x :: getFarPeers(xs, closePeers)
+      else
+        getFarPeers(xs, closePeers)
+  }
+}
+
+fun manageConnections(charData, peerChars) {
+  var closePeers = getClosePeers(charData, peerChars);
+  var farPeers = getFarPeers(peerChars, closePeers);
+  connectToPeers(charData, closePeers);
+  disconnectFromPeers(farPeers);
+  ()
+}
+
+#once the user receives an new/updated charData, it updates 
+#the room based on it
+sig processServerMsg : (ServerMessage, Room) ~> Room
+fun processServerMsg(serverMsg, room) {
+  switch(serverMsg){
+    case TargetPosition(info) ->
+      if (info.id <> room.charData.id && charWithIdExists(info.id, room.others)) {
+        var currentChar = getCharWithId(info.id, room.others);
+        var newChar = (currentChar with target = info.target);
+        var newPeerList = replaceChar(newChar, room.others);
+        (room with others = newPeerList)
+      } else {
+        room
+      }
+    case CharacterIcon(info) ->
+      if (info.id <> room.charData.id && not(charWithIdExists(info.id, room.others))) {
+        var charData = (id = info.id, name = info.name, position = info.position, target = info.target, imageURL = info.imageURL);
+        var appendToOthers = charData :: room.others;
+        var cData = room.charData;
+        var charIcon = CharacterIcon(id = cData.id, name = cData.name, imageURL = cData.imageURL, position = cData.position, target = cData.target);
+        serverPid ! BroadcastMessage(charIcon);
+        serverPid ! BroadcastMessage(charIcon);
+        serverPid ! BroadcastMessage(charIcon);
+        (room with others = appendToOthers)
+      } else {
+        room
+      }
+  }
+}
+
+#main update function in MVU cycle, runs when message (Msg) is received
+sig updt : (Msg, Room) ~> (Room, MvuCommands.Command(Msg))
+fun updt(msg, room) {
+  switch(msg) {
+    #every frame, this is the case, updates room based on room
+    case NewFrame ->
+      var vec = determineVector(room.charData.position, room.charData.target);
+      var newChar = moveChar(room.charData, vec);
+      var newOthers = updateOthers(room.others);
+      var charMoved = characterMoved(room.charData, newChar);
+      if (charMoved) {
+        manageConnections(newChar, room.others);
+        ((room with charData = newChar, others = newOthers), MvuCommands.empty)
+      } else {
+        manageConnections(newChar, room.others);
+        ((room with others = newOthers), MvuCommands.empty)
+      }
+    case Click(xPos, yPos) ->
+      var targ = (x = intToFloat(xPos), y = intToFloat(yPos));
+      var targPos = TargetPosition(id = room.charData.id, target = targ);
+      serverPid ! BroadcastMessage(targPos);
+      var newChar = (room.charData with target = targ);
+      ((room with charData = newChar), MvuCommands.empty)
+    #runs when the client finds a message (charData) in the client loop process
+    case ServerMsg(msg) ->
+      var room = processServerMsg(msg, room);
+      (room, MvuCommands.empty)
+    case NoOp -> (room, MvuCommands.empty)
+  }
+}
+
+### Rendering
+var ae = MvuAttrs.empty;
+var he = MvuHTML.empty;
+fun ch(xs) { MvuHTML.concat(xs) }
+fun ca(xs) { MvuAttrs.concat(xs) }
+
+#HTML for charData
+sig drawChar : (CharacterData) -> HTML(Msg)
+fun drawChar(c) {
+  var x = c.position.x;
+  var y = c.position.y;
+  var name = c.name;
+  div (class ("character") +@
+    style ("left:" ^^ floatToString(x) ^^ "px;top:" ^^ floatToString(y) ^^ "px;position:absolute;" ^^
+    "background-image: url(" ^^ c.imageURL ^^ ");background-position: center;"),
+    p (class("charName"), textNode(name))
+  )
+}
+
+#list of charDatas in HTML
+sig listOfHTMLChars : ([CharacterData]) ~> [HTML(Msg)]
+fun listOfHTMLChars(cs) {
+  switch(cs) {
+    case []         -> []
+    case charData::xs ->
+      drawChar(charData) :: listOfHTMLChars(xs)
+  }
+}
+
+fun joinedView(room) {
+  var elem = getNodeById("localVideoDiv");
+  domSetAttributeFromRef(elem, "class", "webcamMode");
+  var name = room.charData.name;
+  ch([
+    h1 (class("localName"), textNode(name)),	
+    div (id ("canvas"), ch([	
+      drawChar(room.charData),	
+      ch(listOfHTMLChars(room.others)),	
+      input (	
+        ca([	
+          id ("printNames"),	
+          type ("submit"),	
+          value ("Print Users"),	
+          printNamesHandler(room.others)	
+        ]),	
+        he)	
+    ]))	
+  ])
+}
+
+#main view function in MVU cycle, display different HTML bases on state of model
+sig view : (Room) ~> HTML(Msg)
+fun view(room) {
+  joinedView(room)
+}
+
+#subscriptions to detect events for updt function
+sig subscriptions : (Room) -> Sub(Msg)
+fun subscriptions(model) {
+  animFrameHandler() +^ mouseDownHandler()
+}
+
+#invariant, at least one of msgs, pids is empty.
+fun clientLoop(hndl) {
+    receive {
+      case Message(msg) ->
+        Mvu.dispatch(ServerMsg(msg), hndl);
+        clientLoop(hndl)
+    }
+}
+
+fun waitForID() {
+  var id = WebRTC.getID();
+  if (intToString(id) <> "undefined")
+    ()
+  else
+    waitForID()
+}
+
+fun waitForLocalVid() {
+  var localVidExists = JSApp.checkLocalVidExists();
+  if (localVidExists)
+    ()
+  else
+    waitForLocalVid()
+}
+
+#begins webRTC connection and registers client with server
+fun clientRegister() {
+  WebRTC.gatherDeviceIds("videoinput");
+  WebRTC.gatherDeviceIds("audioinput");
+  WebRTC.readyCam("_");
+  WebRTC.readyMic("_");
+  WebRTC.createLocalVideo();
+  WebRTC.registerUser();
+  JSApp.displayLiveStream(0);
+  waitForID();
+  waitForLocalVid();
+  sleep(500);
+  var hndl = Mvu.runHandle("placeholder", defaultRoom(self()), view, updt,
+      subscriptions, MvuCommands.empty);
+  serverPid ! Register(self());
+  clientLoop(hndl)
+}
+
+fun mainPage(serverPid) {
+  var clientPid = spawnClient { clientRegister() };
+  page
+  <html>
+    <head>
+      <title>Room</title>
+      <link rel="stylesheet" href="css/app.css" type="text/css" />
+    </head>
+    <body>
+      <div id="placeholder"></div>
+      <div id="streamScroll"></div>
+    </body>
+  </html>
+}
+
+fun main() {
+  addRoute("/", fun(_) { mainPage(serverPid) });
+  addStaticRoute("/css", "css", [("css", "text/css")]);
+  addStaticRoute("/js", "js", [("js", "text/javascript")]);
+  serveWebsockets();
+  servePages()
+}
+
+main()
