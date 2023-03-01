@@ -33,8 +33,12 @@ function _createAverageTimeButton() {
   button.innerHTML = 'Get average times';
   document.body.appendChild(button);
   button.addEventListener('click', function() {
-    const avg = average(messageTimes);
-    alert('Average processing time: ' + avg);
+    const vid = document.getElementById('localVideo');
+    const htmlElement = Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(vid)));
+    const node = Object.getPrototypeOf(Object.getPrototypeOf(htmlElement));
+    console.log(node);
+    //const avg = average(messageTimes);
+    //alert('Average processing time: ' + avg);
   })
 }
 
