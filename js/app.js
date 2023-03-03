@@ -1,4 +1,6 @@
 const peerUuids = [];
+const peerVideoSizes = {};
+const peerVideoScales = {};
 const messageTimes = [];
 let imgURL = "";
 const adjectives = ["Excited", "Anxious", "Demonic", "Jumpy", 
@@ -33,10 +35,9 @@ function _createAverageTimeButton() {
   button.innerHTML = 'Get average times';
   document.body.appendChild(button);
   button.addEventListener('click', function() {
-    const vid = document.getElementById('localVideo');
-    const htmlElement = Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(vid)));
-    const node = Object.getPrototypeOf(Object.getPrototypeOf(htmlElement));
-    console.log(node);
+    const vid = document.getElementById('remoteVideo_2');
+    console.log(vid.videoHeight);
+    console.log(vid.videoWidth);
     //const avg = average(messageTimes);
     //alert('Average processing time: ' + avg);
   })
@@ -60,29 +61,79 @@ function arrangeVideoDivs(pos) {
   }
 }
 
-function appendVidToDiv(id, local) {
-  let divElement = document.createElement('div');
+function getNewScale(oldW, newW, scale) {
+  if (oldW > newW) {
+    return scale * (oldW / newW);
+  } else if (oldW < newW) {
+    return scale / (newW / oldW);
+  } else {
+    return scale;
+  }
+}
+
+function appendVidToDiv(id) {
+  const divElement = document.createElement('div');
   divElement.setAttribute('id', id + 'Div');
-  let localVid = document.getElementById(id + 'Temp');
-  let newLocalVid = document.createElement('video');
+  const localVid = document.getElementById(id + 'Temp');
+  const newLocalVid = document.createElement('video');
   newLocalVid.setAttribute('id', id);
   newLocalVid.setAttribute('class', 'webcam');
   newLocalVid.setAttribute('autoplay', 'true');
   newLocalVid.srcObject = localVid.srcObject;
-  if (local) {
-    divElement.setAttribute('class', 'cameraMode');
-    newLocalVid.muted = true;
-    divElement.appendChild(newLocalVid);
-    document.body.appendChild(divElement);
-  } else {
-    divElement.appendChild(newLocalVid);
-    const peerCount = peerUuids.length;
-    divElement.setAttribute('style', 'position: absolute; left: ' + ((peerCount-1)*200).toString() + 'px;');
-    const videoContainer = document.getElementById('streamScroll'); 
-    videoContainer.appendChild(divElement);
-  }
+  peerVideoSizes[id] = [newLocalVid.videoWidth, newLocalVid.videoHeight];
+  peerVideoScales[id] = 1;
+  /*
+  newLocalVid.addEventListener('resize', function() {
+    const w = newLocalVid.videoWidth;
+    const h = newLocalVid.videoHeight;
+    const oldW = peerVideoSizes[id][0];
+    console.log(newLocalVid.videoWidth);
+    console.log(newLocalVid.videoHeight);
+    const currentScale = peerVideoScales[id];
+    const ratio = getNewScale(oldW, w, currentScale);
+    newLocalVid.style.transform = 'scale(' + ratio + ')';
+    peerVideoSizes[id] = [w, h];
+    newLocalVid.style.transformOrigin = "top left";
+  });
+  */
+  divElement.appendChild(newLocalVid);
+  const peerCount = peerUuids.length;
+  divElement.setAttribute('style', 'position: absolute; left: ' + ((peerCount-1)*200).toString() + 'px;');
+  const videoContainer = document.getElementById('streamScroll'); 
+  videoContainer.appendChild(divElement);
   document.body.removeChild(localVid);
   //arrangeVideoDivs();
+}
+
+function appendLocalVidToDiv(id) {
+  const divElement = document.createElement('div');
+  divElement.setAttribute('id', id + 'Div');
+  const localVid = document.getElementById(id + 'Temp');
+  const newLocalVid = document.createElement('video');
+  newLocalVid.setAttribute('id', id);
+  newLocalVid.setAttribute('class', 'webcam');
+  newLocalVid.setAttribute('autoplay', 'true');
+  newLocalVid.srcObject = localVid.srcObject;
+  divElement.setAttribute('class', 'cameraMode');
+  newLocalVid.muted = true;
+  divElement.appendChild(newLocalVid);
+  document.body.appendChild(divElement);
+  document.body.removeChild(localVid);
+}
+
+function _displayLiveStream(id) {
+  //console.log("Displaying stream of " + id);
+  if (id == 0 && !!document.getElementById('localVideoTemp') && !document.getElementById('localVideoDiv')) {
+    appendLocalVidToDiv('localVideo');
+  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !document.getElementById('remoteVideo_' + id + 'Div')) {
+    _addPeerToList(id);
+    appendVidToDiv('remoteVideo_' + id);
+    console.log("Displayed " + id);
+  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !!document.getElementById('remoteVideo_' + id + 'Div')) {
+    _removePeerVideoDiv(id);
+    _addPeerToList(id);
+    appendVidToDiv('remoteVideo_' + id);
+  }
 }
 
 function _addAudio(id) {
@@ -98,21 +149,6 @@ function _addAudio(id) {
     divElement.appendChild(newLocalAud);
     document.body.appendChild(divElement);
     document.body.removeChild(localAud);
-  }
-}
-
-function _displayLiveStream(id) {
-  //console.log("Displaying stream of " + id);
-  if (id == 0 && !!document.getElementById('localVideoTemp') && !document.getElementById('localVideoDiv')) {
-    appendVidToDiv('localVideo', true);
-  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !document.getElementById('remoteVideo_' + id + 'Div')) {
-    _addPeerToList(id);
-    appendVidToDiv('remoteVideo_' + id, false);
-    console.log("Displayed " + id);
-  } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !!document.getElementById('remoteVideo_' + id + 'Div')) {
-    _removePeerVideoDiv(id);
-    _addPeerToList(id);
-    appendVidToDiv('remoteVideo_' + id, false);
   }
 }
 

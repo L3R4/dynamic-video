@@ -66,16 +66,13 @@ function _checkIfMicLoaded() {
   return localAudioTrackLoaded;
 }
 
-function _getCameraReady(camId) {
-  if (camId == "_") {
-    camId = null;
-  }
+function _getCameraReady(camId, width=null, height=null, fps=null) {
   const constraints = {
     video: {
-      width: {max: 200},
-      height: {max: 150},
-      frameRate: {max: 60},
-      deviceId: camId
+      width: {max: !!width ? width : 40},
+      height: {max: !!height ? height : 30},
+      frameRate: {max: !!fps ? fps : 60},
+      deviceId: camId != "_" ? camId : null
     },
     audio: false
   };
@@ -153,6 +150,19 @@ function _setUpPC(peerUuid, connectionID) {
   peerConnections[peerUuid].pc.addTrack(localAudioTrack);
 }
 
+function _updateResolution() {
+  _getCameraReady("_", 40, 30, 60);
+  setTimeout(() => {
+    for (peerID in peerConnections) {
+      const sender = peerConnections[peerID].pc.getSenders().find(function(s) {
+        return s.track.kind == localVideoTrack.kind;
+      });
+      console.log("Replacing track!");
+      sender.replaceTrack(localVideoTrack);
+    }
+  }, 500);
+}
+
 function _updateConnectionID(peerID, connID) {
   if (peerConnections[peerID]) {
     peerConnections[peerID].connectionID = connID;
@@ -217,8 +227,9 @@ function _getLocalDescForPC(peerUuid) {
 }
 
 function gotRemoteTrack(event, peerUuid) {
-  let track = event.track;
-  if (peerConnections[peerUuid] && !document.getElementById('remoteVideo_' + peerUuid + 'Temp')) {
+  const track = event.track;
+  const tempVid = document.getElementById('remoteVideo_' + peerUuid + 'Temp');
+  if (peerConnections[peerUuid] && !tempVid) {
     if (track.kind == "video") {
       peerConnections[peerUuid].videoTrack = track;
     } else {
@@ -370,6 +381,7 @@ let setAudioOnly = LINKS.kify(_setAudioOnly);
 let setLocalID = LINKS.kify(_setLocalID);
 let getLocalID = LINKS.kify(_getLocalID);
 let setUpPC = LINKS.kify(_setUpPC);
+let updateResolution = LINKS.kify(_updateResolution);
 let updateConnectionID = LINKS.kify(_updateConnectionID);
 let connectionInitiatedWithPeer = LINKS.kify(_connectionInitiatedWithPeer);
 let setLocalDescForPC = LINKS.kify(_setLocalDescForPC);
