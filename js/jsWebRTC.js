@@ -69,8 +69,8 @@ function _checkIfMicLoaded() {
 function _getCameraReady(camId, width=null, height=null, fps=null) {
   const constraints = {
     video: {
-      width: {max: !!width ? width : 20},
-      height: {max: !!height ? height : 15},
+      width: {max: !!width ? width : 4},
+      height: {max: !!height ? height : 3},
       frameRate: {max: !!fps ? fps : 60},
       deviceId: camId != "_" ? camId : null
     },
