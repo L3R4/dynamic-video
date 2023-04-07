@@ -20,11 +20,13 @@ module JSWebRTC {
         checkIfMicLoaded : () ~> Bool;
         getCameraReady : (DeviceID) ~> ();
         getMicReady : (DeviceID) ~> ();
+        getAudioOutputs : () ~> [Float];
         createLocalStreamElement : () ~> ();
         setAudioOnly : () ~> ();
         setLocalID : (Int) ~> ();
         getLocalID : () ~> ID;
         setUpPC : (ID, ConnectionID) ~> ();
+        updateResolution : (Int, Int, Int) ~> ();
         updateConnectionID : (ID, ConnectionID) ~> ();
         addStreamToPC : (ID) ~> ();
         connectionInitiatedWithPeer : (ID) ~> Bool;
@@ -42,6 +44,7 @@ module JSWebRTC {
         disconnectFromUser : (ID) ~> ();
         collectCandidates : () ~> (Candidates);
         addCandidates : (Candidates, ID) ~> ();
+        getTimeInCall : () ~> Int;
         getConnectionID : (ID) ~> ConnectionID;
     }
 }
@@ -288,6 +291,19 @@ fun createLocalVideo() {
 fun setAudioOnly() {
   JSWebRTC.setAudioOnly();
   ()
+}
+
+fun updateResolution(width, height, fps) {
+  JSWebRTC.updateResolution(width, height, fps);
+  ()
+}
+
+fun getAudioOutputs() {
+  JSWebRTC.getAudioOutputs()
+}
+
+fun getTimeInCall() {
+  JSWebRTC.getTimeInCall()
 }
 
 # Loop thread run on the client, listens for messages from the server

@@ -80,29 +80,30 @@ function appendVidToDiv(id) {
   newLocalVid.setAttribute('class', 'webcam');
   newLocalVid.setAttribute('autoplay', 'true');
   newLocalVid.srcObject = localVid.srcObject;
-  peerVideoSizes[id] = [newLocalVid.videoWidth, newLocalVid.videoHeight];
   peerVideoScales[id] = 1;
-  /*
   newLocalVid.addEventListener('resize', function() {
     const w = newLocalVid.videoWidth;
+    console.log("width: " + w);
     const h = newLocalVid.videoHeight;
-    const oldW = peerVideoSizes[id][0];
-    console.log(newLocalVid.videoWidth);
-    console.log(newLocalVid.videoHeight);
+    let oldW;
+    if (!!peerVideoSizes[id]) {
+      oldW = peerVideoSizes[id][0];
+    } else {
+      oldW = w
+    }
     const currentScale = peerVideoScales[id];
-    const ratio = getNewScale(oldW, w, currentScale);
-    newLocalVid.style.transform = 'scale(' + ratio + ')';
+    const scale = getNewScale(oldW, w, currentScale);
+    peerVideoScales[id] = scale;
+    newLocalVid.style.transform = 'scale(' + scale + ')';
     peerVideoSizes[id] = [w, h];
     newLocalVid.style.transformOrigin = "top left";
   });
-  */
   divElement.appendChild(newLocalVid);
   const peerCount = peerUuids.length;
   divElement.setAttribute('style', 'position: absolute; left: ' + ((peerCount-1)*200).toString() + 'px;');
   const videoContainer = document.getElementById('streamScroll'); 
   videoContainer.appendChild(divElement);
   document.body.removeChild(localVid);
-  //arrangeVideoDivs();
 }
 
 function appendLocalVidToDiv(id) {
@@ -122,7 +123,6 @@ function appendLocalVidToDiv(id) {
 }
 
 function _displayLiveStream(id) {
-  //console.log("Displaying stream of " + id);
   if (id == 0 && !!document.getElementById('localVideoTemp') && !document.getElementById('localVideoDiv')) {
     appendLocalVidToDiv('localVideo');
   } else if (id != 0 && !!document.getElementById('remoteVideo_' + id + 'Temp') && !document.getElementById('remoteVideo_' + id + 'Div')) {
@@ -175,6 +175,8 @@ function _removePeerVideoDiv(peerUuid) {
     videoContainer.removeChild(div);
     const index = peerUuids.indexOf(peerUuid);
     peerUuids.splice(index, 1);
+    delete peerVideoSizes[peerUuid];
+    delete peerVideoScales[peerUuid];
     arrangeVideoDivs(index);
   } else if (div2) {
     document.body.removeChild(div2);

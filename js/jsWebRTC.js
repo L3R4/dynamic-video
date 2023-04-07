@@ -149,7 +149,7 @@ function _setUpPC(peerID, connectionID) {
   }
   if (Object.keys(peerConnections).length == 0) {
     callStartedTime = Date.now();
-    _getCameraReady(200, 150, 60);
+    _getCameraReady('_', 200, 150, 60);
   }
   peerConnections[peerID] = {'pc': new RTCPeerConnection(peerConnectionConfig),
                               'iceCandidates': [],
@@ -179,6 +179,7 @@ function _setUpPC(peerID, connectionID) {
 }
 
 function _updateResolution(width, height, fps) {
+  console.log(width, height);
   _getCameraReady("_", width, height, fps);
   setTimeout(() => {
     for (peerID in peerConnections) {
