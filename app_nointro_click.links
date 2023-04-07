@@ -1,3 +1,7 @@
+#fun onMouseDown(f) {
+#  onMouseEvent("mousedown", fun(x) { Just(f(x)) } )
+#}
+
 # currently works under the condition that users don't
 # move within the range of others, move out, then move
 # back in within 3 seconds
@@ -13,6 +17,7 @@ typename ID = Int;
 
 module JSApp {
   alien javascript "js/app.js" {
+    createAverageTimeButton : () ~> ();
     displayLiveStream : (ID) ~> ();
     displayedPeerStream : (ID) ~> Bool;
     removePeerVideoDiv : (ID) ~> ();
@@ -58,6 +63,8 @@ typename Position = (x : Float, y : Float);
 
 typename Vector = (x : Float, y : Float);
 
+typename VideoSetting = (width : Int, height : Int, fps : Int);
+
 #different ways the character can move
 typename CharacterState = [| Up | Down | Left | Right |];
 
@@ -93,7 +100,9 @@ typename CharacterData =
 typename Room =
   (charData : CharacterData, 
    others : [CharacterData],
-   pid : Process({hear : RequestMsg})
+   pid : Process({hear : RequestMsg}),
+   videoSetting : VideoSetting,
+   startTime : Int
   );
 
 #parameters
@@ -104,11 +113,13 @@ var charVelocity = 5.0;
 var xLim = 1130.0;
 var yLim = 430.0;
 
+var audioThresh = 0.001;
+
 #default room to start with
 fun defaultRoom(clientPid) {
   var localID = WebRTC.getID();
   var localName = JSApp.getName(localID);
-  JSApp.takePicture();
+  #JSApp.takePicture();
   var pictureURL = JSApp.getPictureURL();
   var charIcon = CharacterIcon(id = localID, name = localName, imageURL = pictureURL, position = (x = halfWidth, y = halfHeight), target = (x = halfWidth, y = halfHeight));
   serverPid ! BroadcastMessage(charIcon);
@@ -120,7 +131,9 @@ fun defaultRoom(clientPid) {
      imageURL = pictureURL
     ),
    others = [],
-   pid = clientPid
+   pid = clientPid,
+   videoSetting = (width = 200, height = 150, fps = 60),
+   startTime = clientTime()
   )
 }
 
@@ -344,6 +357,34 @@ fun manageConnections(charData, peerChars) {
   ()
 }
 
+fun oneAboveThresh(vals, thresh) {
+  switch(vals) {
+    case [] -> false
+    case x::xs ->
+      if (x >= thresh)
+        true
+      else
+        oneAboveThresh(xs, thresh)
+  }
+}
+
+fun checkAudioActivity(videoSetting, startTime) {
+  var audioOutputs = WebRTC.getAudioOutputs();
+  var spokeRecently = oneAboveThresh(audioOutputs, audioThresh);
+  var lowVideoSetting = (width = 40, height = 30, fps = 60);
+  var highVideoSetting = (width = 200, height = 150, fps = 60);
+  var timeInCall = WebRTC.getTimeInCall();
+  if (not(spokeRecently) && videoSetting <> lowVideoSetting && timeInCall > 5) {
+    WebRTC.updateResolution(40, 30, 60);
+    lowVideoSetting
+  } else if (spokeRecently && videoSetting == lowVideoSetting && timeInCall > 5) {
+    WebRTC.updateResolution(200, 150, 60);
+    highVideoSetting
+  } else {
+    videoSetting
+  }
+}
+
 #once the user receives an new/updated charData, it updates 
 #the room based on it
 sig processServerMsg : (ServerMessage, Room) ~> Room
@@ -386,10 +427,12 @@ fun updt(msg, room) {
       var charMoved = characterMoved(room.charData, newChar);
       if (charMoved) {
         manageConnections(newChar, room.others);
-        ((room with charData = newChar, others = newOthers), MvuCommands.empty)
+        var vidSetting = checkAudioActivity(room.videoSetting, room.startTime);
+        ((room with charData = newChar, others = newOthers, videoSetting = vidSetting), MvuCommands.empty)
       } else {
         manageConnections(newChar, room.others);
-        ((room with others = newOthers), MvuCommands.empty)
+        var vidSetting = checkAudioActivity(room.videoSetting, room.startTime);
+        ((room with others = newOthers, videoSetting = vidSetting), MvuCommands.empty)
       }
     case Click(xPos, yPos) ->
       var targ = (x = intToFloat(xPos), y = intToFloat(yPos));
@@ -506,6 +549,7 @@ fun clientRegister() {
   sleep(500);
   var hndl = Mvu.runHandle("placeholder", defaultRoom(self()), view, updt,
       subscriptions, MvuCommands.empty);
+  JSApp.createAverageTimeButton();
   serverPid ! Register(self());
   clientLoop(hndl)
 }
